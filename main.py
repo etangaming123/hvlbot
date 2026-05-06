@@ -462,12 +462,12 @@ async def on_message(message):
             # Get user's role color, default to white
             role_color = (255, 255, 255)  # white default
             availablecolors = []
-            for role in original_message.author.roles():
+            for role in original_message.author.roles:
                 if role.color.value != 0:
                     availablecolors.append(role.color.to_rgb())
             availablecolors.reverse() # reverse so higher roles take precedence
             if availablecolors: 
-                role_color = availablecolors[-1]            
+                role_color = availablecolors[0]            
             # Apply color to gradient
             brightness_f = brightness.astype(np.float32)
             r = (brightness_f * role_color[0] / 255).astype(np.uint8)
