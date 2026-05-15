@@ -663,6 +663,9 @@ async def purge(interaction: discord.Interaction, messageid: str):
                 break
         bunchofmessages.append(await interaction.channel.fetch_message(messageid))
         wowbroimovedthismanymessages = len(bunchofmessages)
+        loggingchannel = await bot.get_channel(messageloggingchannelid)
+        embed = discord.Embed(title="Bulk Message Deletion", description=f"{formatUsername(interaction.user)} purged {wowbroimovedthismanymessages} messages in {interaction.channel.mention}.", color=discord.Color.red(), timestamp=discord.utils.utcnow())
+        await loggingchannel.send(embed=embed)
         await interaction.channel.purge(limit=len(bunchofmessages))
         await interaction.edit_original_response(content=f"Purged {wowbroimovedthismanymessages} messages.")
     except Exception as e:
@@ -670,29 +673,37 @@ async def purge(interaction: discord.Interaction, messageid: str):
         traceback.print_exc()
         return
 
-@bot.tree.command(name="lockdown", description="Locks down channels.")
+@bot.tree.command(name="lockdown", description="Removes send message permissions from @everyone.")
 async def lockdown(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     if not moderatorplusplusroleid in [role.id for role in interaction.user.roles]:
         await interaction.edit_original_response(content=f"You don't have permission to use this command!")
         return
     guild = bot.get_guild(serverid)
-    for channelid in channelstolockdown:
-        channel = guild.get_channel(channelid)
-        await channel.set_permissions(guild.default_role, send_messages=False)
-    await interaction.edit_original_response(content=f"Channels have been locked down.")
+    everyone = guild.default_role
+    perms = everyone.permissions
+    perms.update(send_messages=False, add_reactions=False)
+    loggingchannel = await bot.get_channel(messageloggingchannelid)
+    embed = discord.Embed(title="Lockdown Initiated", description=f"Lockdown has been initiated by {formatUsername(interaction.user)}. Send message and add reaction permissions have been removed from @everyone.", color=discord.Color.red(), timestamp=discord.utils.utcnow())
+    await loggingchannel.send(embed=embed)
+    await everyone.edit(permissions=perms, reason=f"Lockdown initiated by {formatUsername(interaction.user)}")
+    await interaction.edit_original_response(content=f"Removed send message permissions from @everyone.")
 
-@bot.tree.command(name="remove-lockdown", description="The opposite of locking down channels.")
+@bot.tree.command(name="remove-lockdown", description="Restores send message permissions to @everyone.")
 async def unlockdown(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     if not moderatorplusplusroleid in [role.id for role in interaction.user.roles]:
         await interaction.edit_original_response(content=f"You don't have permission to use this command!")
         return
     guild = bot.get_guild(serverid)
-    for channelid in channelstolockdown:
-        channel = guild.get_channel(channelid)
-        await channel.set_permissions(guild.default_role, send_messages=True)
-    await interaction.edit_original_response(content=f"Channels have been unlocked.")
+    everyone = guild.default_role
+    perms = everyone.permissions
+    perms.update(send_messages=True, add_reactions=True)
+    await everyone.edit(permissions=perms, reason=f"Lockdown removed by {formatUsername(interaction.user)}")
+    loggingchannel = await bot.get_channel(messageloggingchannelid)
+    embed = discord.Embed(title="Lockdown Removed", description=f"Lockdown has been removed by {formatUsername(interaction.user)}.", color=discord.Color.green(), timestamp=discord.utils.utcnow())
+    await loggingchannel.send(embed=embed)
+    await interaction.edit_original_response(content=f"Restored send message permissions to @everyone.")
 
 # fancypants
 @bot.tree.command(name="changerpc", description="Manually change the bot's RPC (admin only)")
@@ -807,6 +818,10 @@ async def kick(interaction: discord.Interaction, user: discord.User, reason: str
         return
     guild = bot.get_guild(serverid)
     await guild.kick(user, reason=reason)
+    loggingchannel = await bot.get_channel(messageloggingchannelid)
+    embed = discord.Embed(title="User Kicked via HVLBot", description=f"{formatUsername(user)} was kicked by {formatUsername(interaction.user)}.", color=discord.Color.orange(), timestamp=discord.utils.utcnow())
+    embed.add_field(name="Reason", value=reason, inline=False)
+    await loggingchannel.send(embed=embed)
     dmmm = False
     if dm:
         try:
@@ -834,6 +849,10 @@ async def ban(interaction: discord.Interaction, user: discord.User, reason: str 
         return
     guild = bot.get_guild(serverid)
     await guild.ban(user, reason=reason)
+    loggingchannel = await bot.get_channel(messageloggingchannelid)
+    embed = discord.Embed(title="User Banned via HVLBot", description=f"{formatUsername(user)} was banned by {formatUsername(interaction.user)}.", color=discord.Color.red(), timestamp=discord.utils.utcnow())
+    embed.add_field(name="Reason", value=reason, inline=False)
+    await loggingchannel.send(embed=embed)
     dmmm = False
     if dm:
         try:
@@ -851,7 +870,7 @@ async def ban(interaction: discord.Interaction, user: discord.User, reason: str 
 
 @bot.tree.command(name="unban", description="Unban a user from the server. [user id]")
 @app_commands.describe(userid="The ID of the user to unban.")
-async def unban(interaction: discord.Interaction, userid: str):
+async def unban(interaction: discord.Interaction, userid: int):
     await interaction.response.defer()
     if not moderatorplusplusroleid in [role.id for role in interaction.user.roles]:
         await interaction.edit_original_response(content=f"You don't have permission to use this command!")
@@ -863,6 +882,9 @@ async def unban(interaction: discord.Interaction, userid: str):
         guild = bot.get_guild(serverid)
         user = await bot.fetch_user(userid)
         await guild.unban(user)
+        loggingchannel = await bot.get_channel(messageloggingchannelid)
+        embed = discord.Embed(title="User Unbanned via HVLBot", description=f"{formatUsername(user)} was unbanned by {formatUsername(interaction.user)}.", color=discord.Color.green(), timestamp=discord.utils.utcnow())
+        await loggingchannel.send(embed=embed)
         await interaction.edit_original_response(content=f"{formatUsername(user)} has been unbanned from the server.")
     except Exception as e:
         await interaction.edit_original_response(content=f"An error occurred: {e}")
@@ -894,13 +916,17 @@ async def timeout(interaction: discord.Interaction, user: discord.User, duration
         return
     try:
         await member.timeout(discord.utils.utcnow() + datetime.timedelta(seconds=duration.value), reason=reason)
+        loggingchannel = await bot.get_channel(messageloggingchannelid)
+        embed = discord.Embed(title="User Timed Out via HVLBot", description=f"{formatUsername(user)} was timed out by {formatUsername(interaction.user)} for {duration.name}.", color=discord.Color.orange(), timestamp=discord.utils.utcnow())
+        embed.add_field(name="Reason", value=reason, inline=False)
+        await loggingchannel.send(embed=embed)
         await interaction.edit_original_response(content=f"{formatUsername(user)} has been timed out for {duration.name}.")
     except Exception as e:
         await interaction.edit_original_response(content=f"An error occurred: {e}")
         traceback.print_exc()
         return
 
-@bot.tree.command(name="timeout-custom", description="Timeout a user for a custom amount of time (in minutes).") # why doesn't discord have this one built in? that would be really useful
+@bot.tree.command(name="timeout-custom", description="Timeout a user for a custom amount of time (in minutes).")
 @app_commands.describe(user="The user to timeout.", duration="The duration of the timeout in minutes.", reason="The reason for the timeout.")
 async def timeout_custom(interaction: discord.Interaction, user: discord.User, duration: int, reason: str = "No reason provided."):
     await interaction.response.defer()
@@ -917,6 +943,10 @@ async def timeout_custom(interaction: discord.Interaction, user: discord.User, d
         return
     try:
         await member.timeout(discord.utils.utcnow() + datetime.timedelta(minutes=duration), reason=reason)
+        loggingchannel = await bot.get_channel(messageloggingchannelid)
+        embed = discord.Embed(title="User Timed Out via HVLBot", description=f"{formatUsername(user)} was timed out by {formatUsername(interaction.user)} for {duration} minutes.", color=discord.Color.orange(), timestamp=discord.utils.utcnow())
+        embed.add_field(name="Reason", value=reason, inline=False)
+        await loggingchannel.send(embed=embed)
         await interaction.edit_original_response(content=f"{formatUsername(user)} has been timed out for {duration} minutes.")
     except Exception as e:
         await interaction.edit_original_response(content=f"An error occurred: {e}")
@@ -940,6 +970,9 @@ async def untimeout(interaction: discord.Interaction, user: discord.User):
         return
     try:
         await member.timeout(None, reason="Timeout removed.")
+        loggingchannel = await bot.get_channel(messageloggingchannelid)
+        embed = discord.Embed(title="User Untimed Out via HVLBot", description=f"{formatUsername(user)} was untimed out by {formatUsername(interaction.user)}.", color=discord.Color.green(), timestamp=discord.utils.utcnow())
+        await loggingchannel.send(embed=embed)
         await interaction.edit_original_response(content=f"Timeout has been removed from {formatUsername(user)}.")
     except Exception as e:
         await interaction.edit_original_response(content=f"An error occurred: {e}")
