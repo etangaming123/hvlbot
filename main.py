@@ -66,7 +66,7 @@ for item in datastores:
             pickle.dump({}, file)
         print(f"Created new file [{item}.pkl]")
 
-datastoresbuttheseonesarelists = ["starboard"] # pkls to create but these are lists
+datastoresbuttheseonesarelists = ["starboard", "bannedecqc"] # pkls to create but these are lists
 for item in datastoresbuttheseonesarelists:
     if not os.path.exists(f"{item}.pkl"):
         with open(f"{item}.pkl", "wb") as file:
@@ -141,6 +141,16 @@ async def resetQueueCheckMessage():
     except Exception as e:
         print(f"Error resetting queue check message: {e}")
 
+def checkIfBannedFromQueueCheck(userId): # checks if user is banned from using queue check buttons
+    bannedlist = loadData("bannedecqc")
+    if bannedlist == "":
+        print("Error loading banned list for queue check.")
+        return False
+    if userId in bannedlist:
+        return True
+    else:
+        return False
+
 async def experimentalQueueCheck(): # queue check for maimai. maimai is arcade rhythm game, only 2 people can play at once (at least in hurstville, things get complicated when there are multiple cabs)
     channel = bot.get_channel(experimentalqueuecheckchannelid)
     class queueCheckButtons(discord.ui.View):
@@ -151,6 +161,9 @@ async def experimentalQueueCheck(): # queue check for maimai. maimai is arcade r
         async def queuecheck_plus(self, interaction: discord.Interaction, button: discord.ui.Button):
             if time.localtime().tm_hour < 9:
                 await interaction.response.send_message(content=f"KOKO amusement Hurstville is currently closed, goodnight!", ephemeral=True)
+                return
+            if checkIfBannedFromQueueCheck(interaction.user.id):
+                await interaction.response.send_message(content=f"You are either banned from using the queue buttons, or there was an error.", ephemeral=True)
                 return
             global playersinqueue, userincontrol, userlastbuttontime, didwealreadyreset, userlastbuttontimebutmorepermanent
             didwealreadyreset = False
@@ -170,6 +183,9 @@ async def experimentalQueueCheck(): # queue check for maimai. maimai is arcade r
         async def queuecheck_minus(self, interaction: discord.Interaction, button: discord.ui.Button):
             if time.localtime().tm_hour < 9:
                 await interaction.response.send_message(content=f"KOKO amusement Hurstville is currently closed, goodnight!", ephemeral=True)
+                return
+            if checkIfBannedFromQueueCheck(interaction.user.id):
+                await interaction.response.send_message(content=f"You are either banned from using the queue buttons, or there was an error.", ephemeral=True)
                 return
             global playersinqueue, userincontrol, userlastbuttontime, didwealreadyreset, userlastbuttontimebutmorepermanent
             didwealreadyreset = False
@@ -192,6 +208,9 @@ async def experimentalQueueCheck(): # queue check for maimai. maimai is arcade r
             if time.localtime().tm_hour < 9:
                 await interaction.response.send_message(content=f"KOKO amusement Hurstville is currently closed, goodnight!", ephemeral=True)
                 return
+            if checkIfBannedFromQueueCheck(interaction.user.id):
+                await interaction.response.send_message(content=f"You are either banned from using the queue buttons, or there was an error.", ephemeral=True)
+                return
             global playersplaying, playersinqueue, userincontrol, userlastbuttontime, didwealreadyreset, userlastbuttontimebutmorepermanent
             didwealreadyreset = False
             if userincontrol != 0 and userincontrol != interaction.user.id and time.time() - userlastbuttontime < 60:
@@ -211,6 +230,9 @@ async def experimentalQueueCheck(): # queue check for maimai. maimai is arcade r
         async def two_playing(self, interaction: discord.Interaction, button: discord.ui.Button):
             if time.localtime().tm_hour < 9:
                 await interaction.response.send_message(content=f"KOKO amusement Hurstville is currently closed, goodnight!", ephemeral=True)
+                return
+            if checkIfBannedFromQueueCheck(interaction.user.id):
+                await interaction.response.send_message(content=f"You are either banned from using the queue buttons, or there was an error.", ephemeral=True)
                 return
             global playersplaying, playersinqueue, userincontrol, userlastbuttontime, didwealreadyreset, userlastbuttontimebutmorepermanent
             didwealreadyreset = False
@@ -232,6 +254,9 @@ async def experimentalQueueCheck(): # queue check for maimai. maimai is arcade r
             if time.localtime().tm_hour < 9:
                 await interaction.response.send_message(content=f"KOKO amusement Hurstville is currently closed, goodnight!", ephemeral=True)
                 return
+            if checkIfBannedFromQueueCheck(interaction.user.id):
+                await interaction.response.send_message(content=f"You are either banned from using the queue buttons, or there was an error.", ephemeral=True)
+                return
             global playersplaying, playersinqueue, userincontrol, userlastbuttontime, didwealreadyreset, userlastbuttontimebutmorepermanent
             didwealreadyreset = False
             if userincontrol != 0 and userincontrol != interaction.user.id and time.time() - userlastbuttontime < 60:
@@ -251,6 +276,9 @@ async def experimentalQueueCheck(): # queue check for maimai. maimai is arcade r
         async def game_end_fallback(self, interaction: discord.Interaction, button: discord.ui.Button):
             if time.localtime().tm_hour < 9:
                 await interaction.response.send_message(content=f"KOKO amusement Hurstville is currently closed, goodnight!", ephemeral=True)
+                return
+            if checkIfBannedFromQueueCheck(interaction.user.id):
+                await interaction.response.send_message(content=f"You are either banned from using the queue buttons, or there was an error.", ephemeral=True)
                 return
             global playersplaying, playersinqueue, userincontrol, userlastbuttontime, didwealreadyreset, userlastbuttontimebutmorepermanent
             didwealreadyreset = False
@@ -619,6 +647,44 @@ async def manualqueuesetup(interaction: discord.Interaction, playing: int, inque
     userlastbuttontime = time.time()
     await editQueueCheckMessage()
     await interaction.edit_original_response(content=f"Queue check has been manually set to {playersplaying} playing and {playersinqueue} in queue.")
+
+@bot.tree.command(name="ban-queue", description="Ban a user from using the queue buttons.")
+@app_commands.describe(user="The user to ban from the queue.")
+async def ban_queue(interaction: discord.Interaction, user: discord.User):
+    await interaction.response.defer(ephemeral=True)
+    if not interaction.user.id == etanid:
+        await interaction.edit_original_response(content=f"You do not have permission to use this command.")
+        return
+    banned_users = loadData("bannedecqc")
+    if not isinstance(banned_users, list):
+        banned_users = []
+    if user.id not in banned_users:
+        banned_users.append(user.id)
+        if saveData("bannedecqc", banned_users):
+            await interaction.edit_original_response(content=f"{user.mention} has been banned from using the queue buttons.")
+        else:
+            await interaction.edit_original_response(content=f"An error occurred while saving the banned users data.")
+    else:
+        await interaction.edit_original_response(content=f"{user.mention} is already banned from using the queue buttons.")
+
+@bot.tree.command(name="unban-queue", description="Unban a user from using the queue buttons.")
+@app_commands.describe(user="The user to unban from the queue.")
+async def unban_queue(interaction: discord.Interaction, user: discord.User):
+    await interaction.response.defer(ephemeral=True)
+    if not interaction.user.id == etanid:
+        await interaction.edit_original_response(content=f"You do not have permission to use this command.")
+        return
+    banned_users = loadData("bannedecqc")
+    if not isinstance(banned_users, list):
+        banned_users = []
+    if user.id in banned_users:
+        banned_users.remove(user.id)
+        if saveData("bannedecqc", banned_users):
+            await interaction.edit_original_response(content=f"{user.mention} has been unbanned from using the queue buttons.")
+        else:
+            await interaction.edit_original_response(content=f"An error occurred while saving the banned users data.")
+    else:
+        await interaction.edit_original_response(content=f"{user.mention} is not currently banned from using the queue buttons.")
 
 # say commands
 @bot.tree.command(name="say", description="wonder what this does")
