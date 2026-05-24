@@ -782,11 +782,11 @@ async def editcustomrole(interaction: discord.Interaction, name: str, color: str
     if customroledata == "":
         await interaction.edit_original_response(content=f"An error occurred while loading custom role data.")
         return
-    if not interaction.user.id in customroledata:
+    if not str(interaction.user.id) in customroledata:
         await interaction.edit_original_response(content=f"You do not have a custom role!")
         return
     guild = bot.get_guild(serverid)
-    role = guild.get_role(customroledata[interaction.user.id])
+    role = guild.get_role(customroledata[str(interaction.user.id)])
     if role:
         colorreal = None
         if color.lower() == "none":
