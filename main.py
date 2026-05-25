@@ -59,19 +59,29 @@ didwealreadyreset = True # to prevent multiple resets in a row, which could caus
 didwealreadyresetanditsnight = False # to prevent the queue check from resetting multiple times at night when no one is using it, which could also cause issues with the queue check buttons and to stop rate limits
 userlastbuttontimebutmorepermanent = 0 # for automatic queue reset
 
-datastores = ["customroles", "ships", "profiles", "achievements", "playerachievements"] # pkls to create
+datastores = ["customroles", "ships", "profiles", "achievements", "playerachievements"] # json files to create
 for item in datastores:
-    if not os.path.exists(f"{item}.pkl"):
-        with open(f"{item}.pkl", "wb") as file:
-            pickle.dump({}, file)
-        print(f"Created new file [{item}.pkl]")
+    if os.path.exists(f"{item}.pkl"):
+        data = pickle.load(open(f"{item}.pkl", "rb"))
+        with open(f"{item}.json", "w") as file:
+            json.dump(data, file, indent=4)
+            print(f"Converted [{item}.pkl] to [{item}.json]")
+    if not os.path.exists(f"{item}.json"):
+        with open(f"{item}.json", "w") as file:
+            json.dump({}, file)
+        print(f"Created new file [{item}.json]")
 
-datastoresbuttheseonesarelists = ["starboard", "bannedecqc"] # pkls to create but these are lists
+datastoresbuttheseonesarelists = ["starboard", "bannedecqc"] # json files to create but these are lists
 for item in datastoresbuttheseonesarelists:
-    if not os.path.exists(f"{item}.pkl"):
-        with open(f"{item}.pkl", "wb") as file:
-            pickle.dump([], file)
-        print(f"Created new file [{item}.pkl]")
+    if os.path.exists(f"{item}.pkl"):
+        data = pickle.load(open(f"{item}.pkl", "rb"))
+        with open(f"{item}.json", "w") as file:
+            json.dump(data, file, indent=4)
+            print(f"Converted [{item}.pkl] to [{item}.json]")
+    if not os.path.exists(f"{item}.json"):
+        with open(f"{item}.json", "w") as file:
+            json.dump([], file)
+        print(f"Created new file [{item}.json]")
 
 del datastores
 del datastoresbuttheseonesarelists
@@ -89,26 +99,26 @@ def getDisplay(user: discord.User): # incase we only want to get display name an
     else:
         return user.display_name
 
-def saveData(store: str, newdata: dict): # Saves data to a specified .pkl file
+def saveData(store: str, newdata: dict): # Saves data to a specified .json file
     print(f"Saving [{store}]...")
     try:
-        backup = loadData(store) 
-        with open(f"{store}_backup.pkl", "wb") as file:
-            pickle.dump(backup, file)
-        with open(f"{store}.pkl", "wb") as file:
-            pickle.dump(newdata, file)
-        os.remove(f"{store}_backup.pkl")
+        backup = loadData(store)
+        with open(f"{store}_backup.json", "w") as file:
+            json.dump(backup, file)
+        with open(f"{store}.json", "w") as file:
+            json.dump(newdata, file)
+        os.remove(f"{store}_backup.json")
         return True # Return true if it succeeds
     except Exception:
         traceback.print_exc()
-        with open(f"{store}.pkl", "wb") as file:
-            pickle.dump(backup, file)
+        with open(f"{store}.json", "w") as file:
+            json.dump(backup, file)
         return False # Otherwise return false
 
-def loadData(store: str): # Gets data from a specified .pkl file
+def loadData(store: str): # Gets data from a specified .json file
     try:
-        with open(f"{store}.pkl", "rb") as file:
-            return pickle.load(file) # Return file data if it succeeds
+        with open(f"{store}.json", "r") as file:
+            return json.load(file) # Return file data if it succeeds
     except Exception:
         traceback.print_exc()
         return "" # Otherwise return an empty string
