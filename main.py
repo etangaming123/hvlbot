@@ -1136,8 +1136,8 @@ async def pizoelectric(interaction: discord.Interaction, thing: str = None, some
 # shipping
 # shipping's data is fucked and i cba changing this code was YOINKED!!!
 def saveShip(userid1, userid2, newvalue):
-    with open("ships.pkl", "rb") as file:
-        data = pickle.load(file)
+    with open("ships.json", "r") as file:
+        data = json.load(file)
     selectedindex = ""
     for index in data.keys():
         if index == f"{userid1},{userid2}":
@@ -1150,12 +1150,12 @@ def saveShip(userid1, userid2, newvalue):
         data[f"{userid1},{userid2}"] = newvalue
     else:
         data[selectedindex] = newvalue
-    with open("ships.pkl", "wb") as file:
-        pickle.dump(data, file)
+    with open("ships.json", "w") as file:
+        json.dump(data, file)
 
 def getShip(userid1, userid2):
-    with open("ships.pkl", "rb") as file:
-        data = pickle.load(file)
+    with open("ships.json", "r") as file:
+        data = json.load(file)
     selectedindex = ""
     for index in data.keys(): # we never reroll ship values. Have fun.
         if index == f"{userid1},{userid2}":
