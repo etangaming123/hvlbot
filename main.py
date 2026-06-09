@@ -43,6 +43,7 @@ moderatorplusplusroleid = 1477466855944884357
 starboardchannel = 1480349980521664513
 ruiroleid = 1477484699893891146
 bottrapchannelid = 1482874313924411503
+altaccountroleid = 1513700188521234533
 lastcachedmembercount = 0
 
 # what the bot is "playing", will cycle through randomly every minute
@@ -422,6 +423,10 @@ async def on_ready():
 async def on_member_join(member):
     channel = bot.get_channel(joinandleavechannelid)
     await channel.send(f"[+] Welcome {member.mention} to the server!")
+    for _, altlist in loadData("alts").items():
+        if str(member.id) in altlist:
+            await member.add_roles(member.guild.get_role(altaccountroleid))
+            return
     await member.add_roles(member.guild.get_role(memberroleid))
 
 @bot.event
