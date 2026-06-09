@@ -59,7 +59,7 @@ didwealreadyreset = True # to prevent multiple resets in a row, which could caus
 didwealreadyresetanditsnight = False # to prevent the queue check from resetting multiple times at night when no one is using it, which could also cause issues with the queue check buttons and to stop rate limits
 userlastbuttontimebutmorepermanent = 0 # for automatic queue reset
 
-datastores = ["customroles", "ships", "profiles", "achievements", "playerachievements"] # json files to create
+datastores = ["customroles", "ships", "profiles", "achievements", "playerachievements", "alts"] # json files to create
 for item in datastores:
     if os.path.exists(f"{item}.pkl"):
         data = pickle.load(open(f"{item}.pkl", "rb"))
@@ -128,6 +128,16 @@ def truncateMessage(message, length):
         return message
     else:
         return message[:length-40] + f"... [{len(message)-length+40} more characters]"
+
+def returnAllAlts(userid):
+    altaccounts = loadData("alts")
+    if altaccounts == "":
+        print("Error loading alts data.")
+        return []
+    for main, alts in altaccounts.items():
+        if str(userid) == main or str(userid) in alts:
+            return [str(main)] + [str(alt) for alt in alts]
+    return []
 
 # async functions
 async def editQueueCheckMessage():
@@ -335,11 +345,16 @@ async def weatherUpdate():
     global lastcachedmembercount # weatherupdate includes this as well cuz discord.py doesn't allow multiple tasks THAT TOOK AGES TO FIND OUT LMAO
     global didwealreadyreset, didwealreadyresetanditsnight
     guild = bot.get_guild(serverid) # putting this here cuz idk if discord.py allows one task. if it does im gonna crashout cuz that shit took AGES // hi etan it did
-    membercountchannel = guild.get_channel(membercountid)
-    realmembercount = guild.member_count - 4 # we have 4 bots
-    if lastcachedmembercount != realmembercount:
-        lastcachedmembercount = realmembercount
-        await membercountchannel.edit(name=f"Members: {realmembercount}")
+    altaccounts = loadData("alts")
+    if altaccounts != "": # we only update member count if we can read the alts data
+        altcount = 0
+        for _, altlist in altaccounts.items():
+            altcount += len(altlist)
+        membercountchannel = guild.get_channel(membercountid)
+        realmembercount = guild.member_count - sum(1 for member in guild.members if member.bot) - altcount # alternate accounts should not be included in the member count
+        if lastcachedmembercount != realmembercount:
+            lastcachedmembercount = realmembercount
+            await membercountchannel.edit(name=f"Members: {realmembercount}")
     
     await bot.change_presence(activity=discord.Game(prescencecycles[random.randint(0, len(prescencecycles) - 1)]), status=discord.Status.online)
 
@@ -439,6 +454,35 @@ async def on_raw_reaction_add(payload): # starboard function
         saveData("starboard", starboarddata)
         await channel.send(embed=embed)
 
+# alt account punishment linking (to avoid evasion)
+@bot.event
+async def on_ban(guild, user):
+    if guild.id == serverid:
+        everyuser = returnAllAlts(user.id)
+        loggingchannelreal = bot.get_channel(messageloggingchannelid)
+        for userid in everyuser:
+            if userid == str(user.id): # ignore the original banned account (because it's already banned)
+                continue
+            try:
+                await loggingchannelreal.send(f"Also banning alt account with ID {userid} for user {formatUsername(user)} (ID: {user.id})")
+                await guild.ban(discord.Object(id=int(userid)), delete_message_days=1)
+            except Exception:
+                await loggingchannelreal.send(f"Failed to ban alt account with ID {userid} for user {formatUsername(user)} (ID: {user.id})")
+
+@bot.event
+async def on_timeout(guild, user):
+    if guild.id == serverid:
+        everyuser = returnAllAlts(user.id)
+        loggingchannelreal = bot.get_channel(messageloggingchannelid)
+        for userid in everyuser:
+            if userid == str(user.id): # ignore the original timed out account (because it's already timed out)
+                continue
+            try:
+                await loggingchannelreal.send(f"Also timing out alt account [1 hour] with ID {userid} for user {formatUsername(user)} (ID: {user.id})")
+                await guild.timeout(discord.Object(id=int(userid)), duration=3600) # 1 hour timeout for alt accounts, to prevent punishment evasion by messaging on alt
+            except Exception:
+                await loggingchannelreal.send(f"Failed to time out alt account with ID {userid} for user {formatUsername(user)} (ID: {user.id})")
+
 @bot.event
 async def on_message(message):
     if message.author.bot: # ignore bot actions
@@ -470,6 +514,7 @@ async def on_message(message):
         return
     
     if message.content == "r>quote": # i have no idea how this works
+        await message.channel.typing()
         if not message.reference or not message.reference.resolved:
             await message.channel.send("Please reply to a message to quote someone!", reference=message, mention_author=False)
             return
@@ -1638,5 +1683,75 @@ async def listallachievements(interaction: discord.Interaction):
         string += f"- {achievementinfo.get('name', f'ID {achievementid}')} (ID: {achievementid})\n"
 
     await interaction.edit_original_response(content=string)
+
+# alt account linking + management
+@bot.tree.command(name="list-alts", description="Check if a user has any alts linked to their account!")
+@app_commands.describe(user="The user to check for linked alts.")
+async def whois(interaction: discord.Interaction, user: discord.User):
+    await interaction.response.defer(ephemeral=True)
+    altlinks = loadData("alts")
+    if altlinks == "":
+        await interaction.edit_original_response(content=f"An error occurred while loading alt account data.")
+        return
+    linked_alts = altlinks.get(str(user.id), [])
+    if linked_alts:
+        alt_usernames = [f"<@{alt}>" for alt in linked_alts]
+        await interaction.edit_original_response(content=f"{formatUsername(user)} has the following alt accounts linked: {', '.join(alt_usernames)}")
+    else:
+        for ownerid, alts in altlinks.items():
+            if str(user.id) in alts:
+                await interaction.edit_original_response(content=f"{formatUsername(user)} is an alt account linked to <@{ownerid}>.")
+                return
+        await interaction.edit_original_response(content=f"{formatUsername(user)} does not have any linked alt accounts.")
+
+@bot.tree.command(name="link-alt", description="Link an alt account to a main account. (owner only)")
+@app_commands.describe(mainaccount="The main account to link to.", altaccount="The alt account to link by user ID.")
+async def linkalt(interaction: discord.Interaction, mainaccount: discord.User, altaccount: str):
+    await interaction.response.defer(ephemeral=True)
+    if interaction.user.id != etanid:
+        await interaction.edit_original_response(content=f"You don't have permission to use this command!")
+        return
+    altlinks = loadData("alts")
+    if altlinks == "":
+        await interaction.edit_original_response(content=f"An error occurred while loading alt account data.")
+        return
+    if str(altaccount) in altlinks:
+        await interaction.edit_original_response(content=f"That alt account is already linked to a main account.")
+        return
+    if not mainaccount.id in altlinks.values():
+        altlinks[str(mainaccount.id)] = []
+    altlinks[str(mainaccount.id)].append(str(altaccount))
+    if not saveData("alts", altlinks):
+        await interaction.edit_original_response(content=f"An error occurred while saving alt account data.")
+        return
+    await interaction.edit_original_response(content=f"Linked <@{altaccount}> as an alt of <@{mainaccount.id}> successfully!")
+
+@bot.tree.command(name="unlink-alt", description="Unlink an alt account from its main account. (owner only)")
+@app_commands.describe(altaccount="The alt account to unlink by user ID.")
+async def unlinkalt(interaction: discord.Interaction, altaccount: str):
+    await interaction.response.defer(ephemeral=True)
+    if interaction.user.id != etanid:
+        await interaction.edit_original_response(content=f"You don't have permission to use this command!")
+        return
+    altlinks = loadData("alts")
+    if altlinks =="":
+        await interaction.edit_original_response(content=f"An error occurred while loading alt account data.")
+        return
+    for alts in altlinks.values():
+        if str(altaccount) in alts:
+            break
+    else:
+        await interaction.edit_original_response(content=f"That alt account is not linked to any main account.")
+        return
+    for mainaccount_id, alt_list in altlinks.items():
+        if str(altaccount) in alt_list:
+            alt_list.remove(str(altaccount))
+            if not alt_list:  # If the main account has no more alts, remove it
+                del altlinks[mainaccount_id]
+            break
+    if not saveData("alts", altlinks):
+        await interaction.edit_original_response(content=f"An error occurred while saving alt account data.")
+        return
+    await interaction.edit_original_response(content=f"Unlinked <@{altaccount}> from its main account successfully!")
 
 bot.run(env["token"])
