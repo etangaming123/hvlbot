@@ -772,6 +772,21 @@ async def say_dm(interaction: discord.Interaction, user: discord.User, message: 
         return
     await interaction.edit_original_response(content=f"Done!")
 
+@bot.tree.command(name="say-form", description="same as /say but with a form, so you can multiline")
+async def say_form(interaction: discord.Interaction):
+    if not interaction.user.id == etanid:
+        await interaction.response.send_message(content=f"You do not have permission to use this command.", ephemeral=True)
+        return
+    
+    class SayModal(discord.ui.Modal, title="Say Command"):
+        message = discord.ui.TextInput(label="Message", style=discord.TextStyle.paragraph)
+
+        async def on_submit(self, interaction: discord.Interaction):
+            await interaction.channel.send(self.message.value)
+            await interaction.response.send_message(content=f"Done!", ephemeral=True)
+
+    await interaction.response.send_modal(SayModal())
+
 # moderation
 @bot.tree.command(name="purge", description="Purge a bunch of messages.")
 @app_commands.describe(messageid="The ID of the first message in the conversation.")
