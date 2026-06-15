@@ -45,6 +45,7 @@ ruiroleid = 1477484699893891146
 bottrapchannelid = 1482874313924411503
 altaccountroleid = 1513700188521234533
 lastcachedmembercount = 0
+bottraproleid = 1516000045332430918
 
 # what the bot is "playing", will cycle through randomly every minute
 prescencecycles = ["Project SEKAI COLORFUL STAGE!", "hvl.etangaming.xyz!", "Yoyoyo!", "coded by etangaming123!", "maimaiDX!", "[mai²] server tag!", "reply to a message with r>quote, trust me"]
@@ -346,18 +347,26 @@ async def weatherUpdate():
     global lastcachedmembercount # weatherupdate includes this as well cuz discord.py doesn't allow multiple tasks THAT TOOK AGES TO FIND OUT LMAO
     global didwealreadyreset, didwealreadyresetanditsnight
     guild = bot.get_guild(serverid) # putting this here cuz idk if discord.py allows one task. if it does im gonna crashout cuz that shit took AGES // hi etan it did
-    altaccounts = loadData("alts")
-    if altaccounts != "": # we only update member count if we can read the alts data
-        altcount = 0
-        for _, altlist in altaccounts.items():
-            altcount += len(altlist)
-        membercountchannel = guild.get_channel(membercountid)
-        realmembercount = guild.member_count - sum(1 for member in guild.members if member.bot) - altcount # alternate accounts should not be included in the member count
-        if lastcachedmembercount != realmembercount:
-            lastcachedmembercount = realmembercount
-            await membercountchannel.edit(name=f"Members: {realmembercount}")
-    
-    await bot.change_presence(activity=discord.Game(prescencecycles[random.randint(0, len(prescencecycles) - 1)]), status=discord.Status.online)
+
+    leesto = [0, 10, 20, 30, 40, 50] # this is probably the worst way to do it
+    if time.localtime().tm_min in leesto: # only run at an interval of 10 minutes, in theory
+        altaccounts = loadData("alts")
+        if altaccounts != "": # we only update member count if we can read the alts data
+            altcount = 0
+            for _, altlist in altaccounts.items():
+                altcount += len(altlist)
+            membercountchannel = guild.get_channel(membercountid)
+            realmembercount = guild.member_count - sum(1 for member in guild.members if member.bot) - altcount # alternate accounts should not be included in the member count
+            if lastcachedmembercount != realmembercount:
+                lastcachedmembercount = realmembercount
+                await membercountchannel.edit(name=f"Members: {realmembercount}")
+        
+        await bot.change_presence(activity=discord.Game(prescencecycles[random.randint(0, len(prescencecycles) - 1)]), status=discord.Status.online)
+
+        bottraprole = guild.get_role(bottraproleid)
+        for member in guild.members:
+            if bottraprole in member.roles:
+                guild.ban(member, delete_message_days=1, reason="Assigned bot trap role.")
 
     if time.localtime().tm_hour == 0 and didwealreadyresetanditsnight == False:
         didwealreadyresetanditsnight = True
@@ -1245,6 +1254,8 @@ async def ship(interaction: discord.Interaction, user1: discord.User, user2: dis
     await interaction.response.defer()
     if interaction.user.id == user1.id and interaction.user.id == user2.id:
         await interaction.edit_original_response(content="You can't ship yourself with yourself!")
+    elif user1.id == user2.id:
+        await interaction.edit_original_response(content="You can't ship a user with themselves!")
     else:
         percentage = getShip(user1.id, user2.id)
         extratext = ""
