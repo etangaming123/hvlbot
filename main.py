@@ -364,9 +364,15 @@ async def weatherUpdate():
         await bot.change_presence(activity=discord.Game(prescencecycles[random.randint(0, len(prescencecycles) - 1)]), status=discord.Status.online)
 
         bottraprole = guild.get_role(bottraproleid)
+        loggus = bot.get_channel(messageloggingchannelid)
         for member in guild.members:
             if bottraprole in member.roles:
-                guild.ban(member, delete_message_days=1, reason="Assigned bot trap role.")
+                try:
+                    await guild.ban(member, delete_message_days=1, reason="Assigned bot trap role.")
+                    await loggus.send(f"Banned {formatUsername(member)} for having bot trap role.")
+                except discord.Forbidden:
+                    await loggus.send(f"Failed to ban {formatUsername(member)} for having bot trap role.")
+                    print(f"Failed to ban member: {member.name}")
 
     if time.localtime().tm_hour == 0 and didwealreadyresetanditsnight == False:
         didwealreadyresetanditsnight = True
