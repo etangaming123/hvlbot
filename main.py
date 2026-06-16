@@ -516,12 +516,6 @@ async def on_message(message):
         embed.set_image(url=message.attachments[0].url if message.attachments else None)
         await channel.send(embed=embed)
         return
-    if "discord.gg/" in message.content.lower(): # block invite links
-        if message.author.id == etanid: # but if it's etan it's okay
-            return
-        await message.delete()
-        await message.channel.send(f"[A message from {formatUsername(message.author)} has been blocked. (Invite links disabled)]")
-        return
     if message.channel.id == bottrapchannelid: # ban those who send messages in the oh so obvious trap
         lchannelreal = bot.get_channel(messageloggingchannelid)
         try:
