@@ -1,7 +1,6 @@
 hvlbot.code-workspace
-env.json
-ships.pkl
-starboard.pkl
-customroles.pkl
+*.pkl
 .DS_Store
 .vscode
+*.json
+*.bat
