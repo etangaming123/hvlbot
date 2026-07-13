@@ -2,8 +2,11 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 
-from common import *
+import common as common_module
 
+for name in dir(common_module):
+    if not name.startswith("_"):
+        globals()[name] = getattr(common_module, name)
 
 class CustomRoles(commands.Cog):
     def __init__(self, bot: commands.Bot):

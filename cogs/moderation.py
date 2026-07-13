@@ -14,7 +14,11 @@ import aiohttp
 import numpy as np
 import json
 
-from common import *
+import common as common_module
+
+for name in dir(common_module):
+    if not name.startswith("_"):
+        globals()[name] = getattr(common_module, name)
 
 # moderation
 class Moderation(commands.Cog):

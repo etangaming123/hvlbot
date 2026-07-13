@@ -40,7 +40,11 @@ if not os.path.exists("env.json"):
 
 env = json.load(open("env.json", "r"))
 
-from common import *
+import common as common_module
+
+for name in dir(common_module):
+    if not name.startswith("_"):
+        globals()[name] = getattr(common_module, name)
 
 # async functions
 async def editQueueCheckMessage():
