@@ -40,6 +40,7 @@ if not os.path.exists("env.json"):
 
 env = json.load(open("env.json", "r"))
 
+from common import bottrapchannelid
 from common import *
 
 # async functions
