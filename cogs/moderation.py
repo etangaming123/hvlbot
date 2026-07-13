@@ -14,11 +14,8 @@ import aiohttp
 import numpy as np
 import json
 
-import common as common_module
+from common import experimentalqueuecheckchannelid, formatUsername, loadData, saveData, truncateMessage, returnAllAlts, serverid, etanid, membercountid, bottraproleid, messageloggingchannelid, weatherannouncementschannelid, queuecheckmessageid, returnAllAlts, formatUsername, loadData, saveData, truncateMessage, prescencecycles, openweatherapikey, lastcachedmembercount, didwealreadyreset, didwealreadyresetanditsnight, userlastbuttontimebutmorepermanent, starboardchannel, bot, bottraproleid, memberroleid, altaccountroleid, ruiroleid, joinandleavechannelid, SUPASECRETLOGGINGCHANNELID, moderatorroleid, moderatorplusplusroleid, channelstolockdown, bottrapchannelid, weatherannouncementschannelid, experimentalqueuecheckchannelid, playersinqueue, playersplaying, userincontrol, userlastbuttontime, getDisplay
 
-for name in dir(common_module):
-    if not name.startswith("_"):
-        globals()[name] = getattr(common_module, name)
 
 # moderation
 class Moderation(commands.Cog):
