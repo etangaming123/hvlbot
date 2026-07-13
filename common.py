@@ -14,8 +14,6 @@ import aiohttp
 import numpy as np
 import json
 
-from main import env
-
 # variables // i cba adding these to env so eh
 joinandleavechannelid = 1477467436193153064
 messageloggingchannelid = 1477471562075607081
@@ -38,6 +36,8 @@ bottraproleid = 1516000045332430918
 
 # what the bot is "playing", will cycle through randomly every minute
 prescencecycles = ["Project SEKAI COLORFUL STAGE!", "hvl.etangaming.xyz!", "Yoyoyo!", "coded by etangaming123!", "maimaiDX!", "[mai²] server tag!", "reply to a message with r>quote, trust me"]
+
+env = json.load(open("env.json", "r"))
 
 openweatherapikey = env["openweatherapikey"]
 
