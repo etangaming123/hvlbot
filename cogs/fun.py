@@ -64,51 +64,6 @@ textvalues = {
 class Fun(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-
-    @app_commands.command(name="8ball", description="Ask the magic 8ball a question!")
-    @app_commands.describe(question="The question to ask the 8ball. (a yes or no question, and keep it short!)")
-    async def eight_ball(self, interaction: discord.Interaction, question: str):
-        responses = [
-            "It is certain.",
-            "It is decidedly so.",
-            "Without a doubt.",
-            "Yes - definitely.",
-            "You may rely on it.",
-            "As I see it, yes.",
-            "Most likely.",
-            "Outlook good.",
-            "Yes.",
-            "Signs point to yes.",
-            "Reply hazy, try again.",
-            "Ask again later.",
-            "Better not tell you now.",
-            "Cannot predict now.",
-            "Concentrate and ask again.",
-            "Don't count on it.",
-            "My reply is no.",
-            "My sources say no.",
-            "Outlook not so good.",
-            "Very doubtful.",
-        ]
-        await interaction.response.send_message(content=f"You asked the 8ball \"{question}\"...\nThe 8ball says... {random.choice(responses)}")
-
-    @app_commands.command(name="braincells", description="Check how many braincells you (or someone else) has left. (highest is 1000)")
-    @app_commands.describe(user="The user to check braincells for (defaults to yourself).")
-    async def braincells(self, interaction: discord.Interaction, user: discord.User = None):
-        if user is None:
-            user = interaction.user
-        braincellcount = random.randint(0, 1000)
-        await interaction.response.send_message(content=f"{formatUsername(user)} has {braincellcount} braincells.")
-
-    @app_commands.command(name="pizoelectric", description="[Thing] is turning [something else] into electricity!")
-    @app_commands.describe(thing="Who is turning something into electricity?", somethingelse="What is being turned into electricity?")
-    async def pizoelectric(self, interaction: discord.Interaction, thing: str = None, somethingelse: str = None):
-        if thing is None:
-            thing = "Japan"
-        if somethingelse is None:
-            somethingelse = "footsteps"
-        await interaction.response.send_message(content=f"{thing} is turning {somethingelse} into electricity! ⚡Using piezoelectric tiles, every step you take generates a small amount of energy. Millions of steps together can power LED lights and displays in busy places like Shibuya Station. A brilliant way to create a sustainable and smart city -- turning movement into clean, renewable energy 🌱💡")
-
     @app_commands.command(name="ship", description="Ship 2 discord users! (do not take this seriously it's a random number gen)")
     @app_commands.describe(user1="The first user", user2="The second user")
     async def ship(self, interaction: discord.Interaction, user1: discord.User, user2: discord.User):
