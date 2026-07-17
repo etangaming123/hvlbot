@@ -40,6 +40,8 @@ if not os.path.exists("env.json"):
 
 from common import experimentalqueuecheckchannelid, formatUsername, loadData, saveData, truncateMessage, returnAllAlts, serverid, etanid, membercountid, bottraproleid, messageloggingchannelid, weatherannouncementschannelid, returnAllAlts, formatUsername, loadData, saveData, truncateMessage, prescencecycles, openweatherapikey, lastcachedmembercount, didwealreadyreset, didwealreadyresetanditsnight, userlastbuttontimebutmorepermanent, memberroleid, altaccountroleid, ruiroleid, joinandleavechannelid, SUPASECRETLOGGINGCHANNELID, moderatorroleid, moderatorplusplusroleid, channelstolockdown, bottrapchannelid, weatherannouncementschannelid, experimentalqueuecheckchannelid, playersinqueue, playersplaying, userincontrol, userlastbuttontime, getDisplay, env, starboardchannel
 
+blacklistedterms = ["m>info synthesis", "m>synthesis", "m>scores synthesis", "m>info synthesis.", "m>synthesis.", "m>scores synthesis."]
+
 # async functions
 async def editQueueCheckMessage():
     channel = bot.get_channel(experimentalqueuecheckchannelid)
@@ -436,6 +438,10 @@ async def on_message(message):
         await lchannelreal.send(f"dumbass bot by the name {formatUsername(message.author)} fell for the trap")
         return
     
+    if message.content in blacklistedterms and message.author.id == 1171629295467253806:
+        await message.delete()
+        await message.channel.send("Nope!")
+
     if message.content == "r>quote": # i have no idea how this works
         await message.channel.typing()
         if not message.reference or not message.reference.resolved:
