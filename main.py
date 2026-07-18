@@ -41,6 +41,7 @@ if not os.path.exists("env.json"):
 from common import experimentalqueuecheckchannelid, formatUsername, loadData, saveData, truncateMessage, returnAllAlts, serverid, etanid, membercountid, bottraproleid, messageloggingchannelid, weatherannouncementschannelid, returnAllAlts, formatUsername, loadData, saveData, truncateMessage, prescencecycles, openweatherapikey, lastcachedmembercount, didwealreadyreset, didwealreadyresetanditsnight, userlastbuttontimebutmorepermanent, memberroleid, altaccountroleid, ruiroleid, joinandleavechannelid, SUPASECRETLOGGINGCHANNELID, moderatorroleid, moderatorplusplusroleid, channelstolockdown, bottrapchannelid, weatherannouncementschannelid, experimentalqueuecheckchannelid, playersinqueue, playersplaying, userincontrol, userlastbuttontime, getDisplay, env, starboardchannel
 
 blacklistedterms = ["m>info synthesis", "m>synthesis", "m>scores synthesis", "m>info synthesis.", "m>synthesis.", "m>scores synthesis."]
+didblacklistedtermgetrecieved = False
 
 # async functions
 async def editQueueCheckMessage():
@@ -416,6 +417,9 @@ async def on_timeout(guild, user):
 
 @bot.event
 async def on_message(message):
+    if message.author.id == 604641359416131585 and didblacklistedtermgetrecieved == True:
+        await message.delete()
+        didblacklistedtermgetrecieved = False
     if message.author.bot: # ignore bot actions
         return
     if isinstance(message.channel, discord.DMChannel): # log dms
@@ -440,6 +444,7 @@ async def on_message(message):
     
     if message.content.lower() in blacklistedterms and message.author.id == 1171629295467253806:
         await message.delete()
+        didblacklistedtermgetrecieved = True
         await message.channel.send("Nope!")
 
     if message.content == "r>quote": # i have no idea how this works
