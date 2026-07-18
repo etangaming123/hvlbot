@@ -51,6 +51,21 @@ class Admin(commands.Cog):
 
         await interaction.response.send_modal(SayModal())
 
+    @app_commands.command(name="say-file", description="same as /say but with a file, so you can send files")
+    @app_commands.describe(file="The file to send.")
+    async def say_file(self, interaction: discord.Interaction, file: discord.Attachment):
+        await interaction.response.defer(ephemeral=True)
+        if interaction.user.id != etanid:
+            await interaction.edit_original_response(content="You do not have permission to use this command.")
+            return
+        try:
+            await interaction.channel.send(file=await file.to_file())
+        except Exception as e:
+            await interaction.edit_original_response(content=f"Failed to send file: {e}")
+            traceback.print_exc()
+            return
+        await interaction.edit_original_response(content="Done!")
+
     @app_commands.command(name="changerpc", description="Manually change the bot's RPC (admin only)")
     @app_commands.describe(newrpc="The new RPC to set for the bot.")
     async def changerpc(self, interaction: discord.Interaction, newrpc: str):
