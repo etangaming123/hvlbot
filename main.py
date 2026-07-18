@@ -438,7 +438,7 @@ async def on_message(message):
         await lchannelreal.send(f"dumbass bot by the name {formatUsername(message.author)} fell for the trap")
         return
     
-    if message.content in blacklistedterms and message.author.id == 1171629295467253806:
+    if message.content.lower() in blacklistedterms and message.author.id == 1171629295467253806:
         await message.delete()
         await message.channel.send("Nope!")
 
