@@ -417,6 +417,7 @@ async def on_timeout(guild, user):
 
 @bot.event
 async def on_message(message):
+    global didblacklistedtermgetrecieved
     if message.author.id == 604641359416131585 and didblacklistedtermgetrecieved == True:
         await message.delete()
         didblacklistedtermgetrecieved = False
