@@ -418,9 +418,16 @@ async def on_timeout(guild, user):
 @bot.event
 async def on_message(message):
     global didblacklistedtermgetrecieved
-    if message.author.id == 604641359416131585 and didblacklistedtermgetrecieved == True:
+    if message.author.id == 604641359416131585 and didblacklistedtermgetrecieved:
         await message.delete()
         didblacklistedtermgetrecieved = False
+
+    if message.author.id == 1171629295467253806:
+        for item in blacklistedterms:
+            if item in message.content.lower():
+                await message.delete()
+                didblacklistedtermgetrecieved = True
+
     if message.author.bot: # ignore bot actions
         return
     if isinstance(message.channel, discord.DMChannel): # log dms
@@ -442,12 +449,6 @@ async def on_message(message):
             return
         await lchannelreal.send(f"dumbass bot by the name {formatUsername(message.author)} fell for the trap")
         return
-    
-    for item in blacklistedterms:
-        if item in message.content.lower() and message.author.id == 1171629295467253806:
-            await message.delete()
-            didblacklistedtermgetrecieved = True
-            await message.channel.send("Nope!")
 
     if message.content == "r>quote": # i have no idea how this works
         await message.channel.typing()
