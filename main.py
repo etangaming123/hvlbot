@@ -452,7 +452,7 @@ async def on_message(message):
 
     if message.content[:7] == "r>quote" or message.content[:7] == "r>qwote": # i have no idea how this works
         await message.channel.typing()
-        if not message.content == "r>qwote" and random.randint(0, 10) == 10:
+        if message.content[:7] == "r>qwote" and random.randint(0, 10) == 10:
             await message.channel.send("r>quote is depricated, please use \"r>qwote\" instead.", reference=message, mention_author=False) # lmao
             return
         if not message.reference or not message.reference.resolved:
