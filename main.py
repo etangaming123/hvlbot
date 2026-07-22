@@ -450,8 +450,11 @@ async def on_message(message):
         await lchannelreal.send(f"dumbass bot by the name {formatUsername(message.author)} fell for the trap")
         return
 
-    if message.content == "r>quote": # i have no idea how this works
+    if message.content[:7] == "r>quote" or message.content[:7] == "r>qwote": # i have no idea how this works
         await message.channel.typing()
+        if not message.content == "r>qwote" and random.randint(0, 10) == 10:
+            await message.channel.send("r>quote is depricated, please use \"r>qwote\" instead.", reference=message, mention_author=False) # lmao
+            return
         if not message.reference or not message.reference.resolved:
             await message.channel.send("Please reply to a message to quote someone!", reference=message, mention_author=False)
             return
