@@ -38,7 +38,7 @@ class Moderation(commands.Cog):
                     break
             bunchofmessages.append(await interaction.channel.fetch_message(messageid))
             wowbroimovedthismanymessages = len(bunchofmessages)
-            loggingchannel = await self.bot.get_channel(messageloggingchannelid)
+            loggingchannel = self.bot.get_channel(messageloggingchannelid)
             embed = discord.Embed(title="Bulk Message Deletion", description=f"{formatUsername(interaction.user)} purged {wowbroimovedthismanymessages} messages in {interaction.channel.mention}.", color=discord.Color.red(), timestamp=discord.utils.utcnow())
             await loggingchannel.send(embed=embed)
             await interaction.channel.purge(limit=len(bunchofmessages))
