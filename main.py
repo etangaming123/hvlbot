@@ -25,6 +25,7 @@ COG_EXTENSIONS = [
     "cogs.profiles",
     "cogs.achievements",
     "cogs.alts",
+    "cogs.sticky",
 ]
 
 cogs_loaded = False
