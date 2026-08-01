@@ -9,15 +9,15 @@ class Sticky(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="sticky", description="Sets a sticky message in a channel (owner only)")
-    @app_commands.describe(message="The message to stick to the channel.", channel="The channel to stick the message in (defaults to the current channel).")
-    async def sticky(self, interaction: discord.Interaction, message: str, channel: discord.TextChannel = None):
+    @app_commands.command(name="sticky", description="Sets a sticky message in the current channel (owner only)")
+    @app_commands.describe(message="The message to stick to the channel.")
+    async def sticky(self, interaction: discord.Interaction, message: str):
         await interaction.response.defer(ephemeral=True)
         if interaction.user.id != etanid:
             await interaction.edit_original_response(content="You do not have permission to use this command.")
             return
 
-        targetchannel = channel or interaction.channel
+        targetchannel = interaction.channel
         stickydata = loadData("sticky")
         if stickydata == "":
             await interaction.edit_original_response(content="Error loading sticky message data.")
@@ -41,15 +41,14 @@ class Sticky(commands.Cog):
         saveData("sticky", stickydata)
         await interaction.edit_original_response(content=f"Sticky message set in {targetchannel.mention}.")
 
-    @app_commands.command(name="removesticky", description="Removes the sticky message from a channel (owner only)")
-    @app_commands.describe(channel="The channel to remove the sticky message from (defaults to the current channel).")
-    async def removesticky(self, interaction: discord.Interaction, channel: discord.TextChannel = None):
+    @app_commands.command(name="removesticky", description="Removes the sticky message from the current channel (owner only)")
+    async def removesticky(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         if interaction.user.id != etanid:
             await interaction.edit_original_response(content="You do not have permission to use this command.")
             return
 
-        targetchannel = channel or interaction.channel
+        targetchannel = interaction.channel
         stickydata = loadData("sticky")
         if stickydata == "":
             await interaction.edit_original_response(content="Error loading sticky message data.")
