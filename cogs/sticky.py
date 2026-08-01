@@ -5,6 +5,10 @@ from discord import app_commands
 from common import loadData, saveData, etanid
 
 
+def formatStickyMessage(content: str):
+    return f"{content}\n-# this is a sticky message"
+
+
 class Sticky(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -32,7 +36,7 @@ class Sticky(commands.Cog):
                 pass
 
         try:
-            newmessage = await targetchannel.send(f"📌 **Sticky Message**\n{message}")
+            newmessage = await targetchannel.send(formatStickyMessage(message))
         except discord.Forbidden:
             await interaction.edit_original_response(content="I don't have permission to send messages in that channel.")
             return
@@ -90,7 +94,7 @@ class Sticky(commands.Cog):
             return
 
         try:
-            newmessage = await message.channel.send(f"📌 **Sticky Message**\n{entry['content']}")
+            newmessage = await message.channel.send(formatStickyMessage(entry["content"]))
         except (discord.Forbidden, discord.HTTPException):
             return
 
