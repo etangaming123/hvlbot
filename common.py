@@ -50,7 +50,7 @@ didwealreadyreset = True # to prevent multiple resets in a row, which could caus
 didwealreadyresetanditsnight = False # to prevent the queue check from resetting multiple times at night when no one is using it, which could also cause issues with the queue check buttons and to stop rate limits
 userlastbuttontimebutmorepermanent = 0 # for automatic queue reset
 
-datastores = ["customroles", "ships", "profiles", "achievements", "playerachievements", "alts"] # json files to create
+datastores = ["customroles", "ships", "profiles", "achievements", "playerachievements", "alts", "sticky"] # json files to create
 for item in datastores:
     if os.path.exists(f"{item}.pkl"):
         data = pickle.load(open(f"{item}.pkl", "rb"))
