@@ -4,3 +4,5 @@ hvlbot.code-workspace
 .vscode
 *.json
 *.bat
+__pycache__/
+*.pyc
