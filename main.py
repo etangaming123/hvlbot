@@ -13,6 +13,9 @@ import io
 import aiohttp
 import numpy as np
 import json
+import re
+import emoji as emojilib
+from fontTools.ttLib import TTFont
 
 bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
 
@@ -43,6 +46,155 @@ from common import experimentalqueuecheckchannelid, formatUsername, loadData, sa
 
 blacklistedterms = ["m>info", "m>scores"]
 didblacklistedtermgetrecieved = False
+
+# ---- quote command helpers ----
+
+MENTION_RE = re.compile(r"<@!?(\d+)>|<@&(\d+)>|<#(\d+)>")
+CUSTOM_EMOJI_RE = re.compile(r"<(a?):(\w+):(\d+)>")
+
+FALLBACK_FONT_PATHS = env.get("fallbackfontpaths", [
+    r"C:\Windows\Fonts\seguisym.ttf",  # Segoe UI Symbol: broad symbol/script coverage
+    r"C:\Windows\Fonts\msyh.ttc",      # Microsoft YaHei: Chinese
+    r"C:\Windows\Fonts\malgun.ttf",    # Malgun Gothic: Korean
+    r"C:\Windows\Fonts\meiryo.ttc",    # Meiryo: Japanese
+    r"C:\Windows\Fonts\arial.ttf",     # Arial: broad Latin/Cyrillic/Greek fallback
+])
+
+_cmap_cache = {}
+_font_obj_cache = {}
+_emoji_img_cache = {}
+
+def fontHasGlyph(path, ch):
+    if ch.isspace():
+        return True
+    if path not in _cmap_cache:
+        try:
+            ttf = TTFont(path, lazy=True)
+            cmap = ttf.getBestCmap() or {}
+            ttf.close()
+            _cmap_cache[path] = cmap
+        except Exception:
+            traceback.print_exc()
+            return False  # don't cache the failure; retry next time in case it was transient
+    return ord(ch) in _cmap_cache[path]
+
+def choosePathForChar(ch, primary_path):
+    if fontHasGlyph(primary_path, ch):
+        return primary_path
+    for fp in FALLBACK_FONT_PATHS:
+        if os.path.exists(fp) and fontHasGlyph(fp, ch):
+            return fp
+    return primary_path  # last resort: may render as tofu, better than crashing
+
+def getFontObj(path, size):
+    key = (path, size)
+    if key not in _font_obj_cache:
+        try:
+            _font_obj_cache[key] = ImageFont.truetype(path, size)
+        except Exception:
+            traceback.print_exc()
+            return ImageFont.load_default()  # don't cache the failure; retry next time in case it was transient
+    return _font_obj_cache[key]
+
+def buildRuns(word, size, primary_path):
+    # split a word into (text, font) runs so mixed-script words each render with a font that has the glyphs
+    runs = []
+    cur_path, cur_text = None, ""
+    for ch in word:
+        path = choosePathForChar(ch, primary_path)
+        if path == cur_path:
+            cur_text += ch
+        else:
+            if cur_text:
+                runs.append((cur_text, getFontObj(cur_path, size)))
+            cur_path, cur_text = path, ch
+    if cur_text:
+        runs.append((cur_text, getFontObj(cur_path, size)))
+    return runs
+
+def resolveMentions(text, message):
+    def repl(m):
+        if m.group(1):
+            uid = int(m.group(1))
+            user = discord.utils.get(message.mentions, id=uid) or (message.guild.get_member(uid) if message.guild else None)
+            return f"@{getDisplay(user)}" if user else "@unknown-user"
+        if m.group(2):
+            rid = int(m.group(2))
+            role = discord.utils.get(message.role_mentions, id=rid) or (message.guild.get_role(rid) if message.guild else None)
+            return f"@{role.name}" if role else "@unknown-role"
+        if m.group(3):
+            cid = int(m.group(3))
+            chan = discord.utils.get(message.channel_mentions, id=cid) or (message.guild.get_channel(cid) if message.guild else None)
+            return f"#{chan.name}" if chan else "#unknown-channel"
+    return MENTION_RE.sub(repl, text)
+
+def findEmojiSpans(text):
+    spans = [(m.start(), m.end(), "custom", {"animated": bool(m.group(1)), "name": m.group(2), "id": m.group(3)}) for m in CUSTOM_EMOJI_RE.finditer(text)]
+    spans += [(e["match_start"], e["match_end"], "unicode", {"char": e["emoji"]}) for e in emojilib.emoji_list(text)]
+    spans.sort(key=lambda s: s[0])
+    filtered, last_end = [], 0
+    for s in spans:
+        if s[0] >= last_end:
+            filtered.append(s)
+            last_end = s[1]
+    return filtered
+
+def safeTruncate(text, max_chars):
+    if len(text) <= max_chars:
+        return text, 0
+    cut = max_chars
+    for start, end, _, _ in findEmojiSpans(text):
+        if start < cut < end:
+            cut = start
+    return text[:cut], len(text) - cut
+
+def tokenizeContent(text):
+    spans = findEmojiSpans(text)
+    tokens, pos = [], 0
+    for start, end, kind, data in spans:
+        if start > pos:
+            tokens.append(("text", text[pos:start]))
+        tokens.append((kind, data))
+        pos = end
+    if pos < len(text):
+        tokens.append(("text", text[pos:]))
+    atoms = []
+    for kind, data in tokens:
+        if kind == "text":
+            atoms.extend(("word", w) for w in data.split())
+        else:
+            atoms.append((kind, data))
+    return atoms
+
+async def fetchEmojiImage(session, kind, data, size):
+    cache_key = (kind, data.get("id") or data.get("char"))
+    if cache_key not in _emoji_img_cache:
+        raw_img = None
+        try:
+            if kind == "custom":
+                ext = "gif" if data["animated"] else "png"
+                async with session.get(f"https://cdn.discordapp.com/emojis/{data['id']}.{ext}") as resp:
+                    if resp.status == 200:
+                        raw_img = Image.open(io.BytesIO(await resp.read()))
+                        raw_img.seek(0)  # first frame if animated
+                        raw_img = raw_img.convert("RGBA")
+            else:
+                codepoints_variants = {
+                    "-".join(f"{ord(c):x}" for c in data["char"] if ord(c) != 0xFE0F),
+                    "-".join(f"{ord(c):x}" for c in data["char"]),
+                }
+                for cps in codepoints_variants:
+                    async with session.get(f"https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/72x72/{cps}.png") as resp:
+                        if resp.status == 200:
+                            raw_img = Image.open(io.BytesIO(await resp.read())).convert("RGBA")
+                            break
+        except Exception:
+            raw_img = None
+        _emoji_img_cache[cache_key] = raw_img
+    raw_img = _emoji_img_cache[cache_key]
+    return raw_img.resize((size, size), Image.LANCZOS) if raw_img else None
+
+# ---- end quote command helpers ----
 
 # async functions
 async def editQueueCheckMessage():
@@ -524,49 +676,58 @@ async def on_message(message):
             tx, ty_pad = W // 2 + 30, 40
             text_w = W - tx - ty_pad
 
-            # Truncate message if too long (e.g. > 200 chars)
+            # Resolve @mentions / #channel-names to readable text, then truncate if too long (e.g. > 200 chars)
             max_chars = 200
-            quote_text = original_message.content
-            if len(quote_text) > max_chars:
-                quote_text = quote_text[:max_chars] + f"... [{len(quote_text)-max_chars} more characters]"
+            resolved_text = resolveMentions(original_message.content, original_message)
+            quote_text, trimmed_chars = safeTruncate(resolved_text, max_chars)
+            if trimmed_chars:
+                quote_text += f"... [{trimmed_chars} more characters]"
 
-            def wrap_text(text, font, max_width):
-                words = text.split()
-                lines, line = [], ""
-                for word in words:
-                    # Break word character-by-character if it alone exceeds max_width
-                    if draw.textbbox((0, 0), word, font=font)[2] > max_width:
-                        if line:
-                            lines.append(line)
-                            line = ""
-                        chunk = ""
-                        for ch in word:
-                            if draw.textbbox((0, 0), chunk + ch, font=font)[2] <= max_width:
-                                chunk += ch
-                            else:
-                                lines.append(chunk)
-                                chunk = ch
-                        word = chunk  # remainder treated as normal word
-                    test = (line + " " + word).strip()
-                    if draw.textbbox((0, 0), test, font=font)[2] <= max_width:
-                        line = test
+            atoms = tokenizeContent(quote_text)
+
+            # Prefetch emoji images (unicode + custom Discord emoji) once at a large size, resized per font-size trial
+            emoji_images = {}
+            async with aiohttp.ClientSession() as emoji_session:
+                for kind, data in atoms:
+                    if kind in ("custom", "unicode"):
+                        key = (kind, data.get("id") or data.get("char"))
+                        if key not in emoji_images:
+                            emoji_images[key] = await fetchEmojiImage(emoji_session, kind, data, 128)
+
+            def elementWidth(el):
+                if el[0] == "emoji":
+                    return el[2]
+                return sum(draw.textbbox((0, 0), t, font=f)[2] for t, f in el[1])
+
+            def wrapAtoms(font_size):
+                space_w = draw.textbbox((0, 0), " ", font=getFontObj(FONT_PATH, font_size))[2]
+                lines, cur, cur_w = [], [], 0
+                for kind, data in atoms:
+                    if kind == "word":
+                        el = ("text", buildRuns(data, font_size, FONT_PATH))
                     else:
-                        if line:
-                            lines.append(line)
-                        line = word
-                if line:
-                    lines.append(line)
-                return lines
+                        img128 = emoji_images.get((kind, data.get("id") or data.get("char")))
+                        if img128 is None:
+                            el = ("text", buildRuns(data.get("char", ""), font_size, FONT_PATH))
+                        else:
+                            el = ("emoji", img128.resize((font_size, font_size), Image.LANCZOS), font_size)
+                    w = elementWidth(el)
+                    add_w = w if not cur else space_w + w
+                    if cur and cur_w + add_w > text_w:
+                        lines.append(cur)
+                        cur, cur_w = [el], w
+                    else:
+                        cur.append(el)
+                        cur_w += add_w
+                if cur:
+                    lines.append(cur)
+                return lines, space_w
 
-            # Dynamically shrink font until the wrapped text fits vertically
+            # Dynamically shrink font until the wrapped content fits vertically
             max_text_h = H - 80 - (font_name.size + 8) - font_username.size - 20
             font_size = 62
             while font_size >= 16:
-                try:
-                    font_quote = ImageFont.truetype(FONT_PATH, font_size)
-                except Exception:
-                    font_quote = ImageFont.load_default()
-                quote_lines = wrap_text(quote_text, font_quote, text_w)
+                quote_lines, space_w = wrapAtoms(font_size)
                 lh = int(font_size * 1.25)
                 if len(quote_lines) * lh <= max_text_h:
                     break
@@ -581,21 +742,36 @@ async def on_message(message):
 
             # Quote lines (centered in text area)
             for i, line in enumerate(quote_lines):
-                lw = draw.textbbox((0, 0), line, font=font_quote)[2]
-                draw.text((tx + (text_w - lw) // 2, start_y + i * lh), line, fill=(255, 255, 255), font=font_quote)
+                line_w = sum(elementWidth(el) for el in line) + space_w * (len(line) - 1)
+                x = tx + (text_w - line_w) // 2
+                yy = start_y + i * lh
+                for el in line:
+                    if el[0] == "emoji":
+                        emoji_img = el[1]
+                        img.paste(emoji_img, (x, yy), emoji_img)
+                        x += el[2]
+                    else:
+                        for t, f in el[1]:
+                            draw.text((x, yy), t, fill=(255, 255, 255), font=f)
+                            x += draw.textbbox((0, 0), t, font=f)[2]
+                    x += space_w
 
             y = start_y + total_q_h + 10
 
+            def drawCenteredRuns(text, size, y_top, color):
+                runs = buildRuns(text, size, FONT_PATH)
+                w = sum(draw.textbbox((0, 0), t, font=f)[2] for t, f in runs)
+                x = tx + (text_w - w) // 2
+                for t, f in runs:
+                    draw.text((x, y_top), t, fill=color, font=f)
+                    x += draw.textbbox((0, 0), t, font=f)[2]
+
             # "- DisplayName"
-            dname = f"- {getDisplay(original_message.author)}"
-            dw = draw.textbbox((0, 0), dname, font=font_name)[2]
-            draw.text((tx + (text_w - dw) // 2, y), dname, fill=(255, 255, 255), font=font_name)
+            drawCenteredRuns(f"- {getDisplay(original_message.author)}", font_name.size, y, (255, 255, 255))
             y += name_h
 
             # "@username"
-            uname = f"@{original_message.author.name}"
-            uw = draw.textbbox((0, 0), uname, font=font_username)[2]
-            draw.text((tx + (text_w - uw) // 2, y), uname, fill=(160, 160, 160), font=font_username)
+            drawCenteredRuns(f"@{original_message.author.name}", font_username.size, y, (160, 160, 160))
 
             # Watermark bottom-right
             wm = f"rui kamishiro // coded by etangaming123 // join at hvl.etangaming.xyz"
@@ -609,6 +785,5 @@ async def on_message(message):
         except Exception as e: # FAH
             traceback.print_exc()
             await message.channel.send(f"Error creating quote image: {str(e)}", reference=message, mention_author=False)
-
 
 bot.run(env["token"])
