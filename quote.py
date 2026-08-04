@@ -38,7 +38,6 @@ def fontHasGlyph(path, ch):
             ttf.close()
             _cmap_cache[path] = cmap
         except Exception:
-            traceback.print_exc()
             return False  # don't cache the failure; retry next time in case it was transient
     return ord(ch) in _cmap_cache[path]
 
@@ -56,7 +55,6 @@ def getFontObj(path, size):
         try:
             _font_obj_cache[key] = ImageFont.truetype(path, size)
         except Exception:
-            traceback.print_exc()
             return ImageFont.load_default()  # don't cache the failure; retry next time in case it was transient
     return _font_obj_cache[key]
 
