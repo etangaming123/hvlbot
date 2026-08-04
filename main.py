@@ -8,11 +8,10 @@ import random
 import pickle
 import os
 import datetime
-from PIL import Image, ImageDraw, ImageFont
 import io
 import aiohttp
-import numpy as np
 import json
+import re
 
 bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
 
@@ -43,6 +42,33 @@ from common import experimentalqueuecheckchannelid, formatUsername, loadData, sa
 
 blacklistedterms = ["m>info", "m>scores"]
 didblacklistedtermgetrecieved = False
+
+# ---- quote command helpers ----
+
+import quote as quotescript
+
+MENTION_RE = re.compile(r"<@!?(\d+)>|<@&(\d+)>|<#(\d+)>")
+
+if "fallbackfontpaths" in env:
+    quotescript.FALLBACK_FONT_PATHS = env["fallbackfontpaths"]
+
+def resolveMentions(text, message):
+    def repl(m):
+        if m.group(1):
+            uid = int(m.group(1))
+            user = discord.utils.get(message.mentions, id=uid) or (message.guild.get_member(uid) if message.guild else None)
+            return f"@{getDisplay(user)}" if user else "@unknown-user"
+        if m.group(2):
+            rid = int(m.group(2))
+            role = discord.utils.get(message.role_mentions, id=rid) or (message.guild.get_role(rid) if message.guild else None)
+            return f"@{role.name}" if role else "@unknown-role"
+        if m.group(3):
+            cid = int(m.group(3))
+            chan = discord.utils.get(message.channel_mentions, id=cid) or (message.guild.get_channel(cid) if message.guild else None)
+            return f"#{chan.name}" if chan else "#unknown-channel"
+    return MENTION_RE.sub(repl, text)
+
+# ---- end quote command helpers ----
 
 # async functions
 async def editQueueCheckMessage():
@@ -464,151 +490,36 @@ async def on_message(message):
             await message.channel.send("The original author has no profile picture!", reference=message, mention_author=False) # sorry default pfp users
             return
         try:
-            W, H = 1200, 630
-
             # Download avatar
             async with aiohttp.ClientSession() as session:
                 async with session.get(original_message.author.display_avatar.url) as resp:
                     avatar_bytes = await resp.read()
-            avatar_img = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
 
-            # Black background
-            img = Image.new('RGB', (W, H), (0, 0, 0))
-
-            # Radial spotlight gradient with user's role color
-            y_coords, x_coords = np.mgrid[0:H, 0:W]
-            cx, cy = W // 4, H // 2
-            max_r = H * 0.78
-            dist = np.sqrt((x_coords - cx) ** 2 + (y_coords - cy) ** 2)
-            brightness = np.clip(1.0 - dist / max_r, 0, 1) ** 0.55
-            brightness = (brightness * 255).astype(np.uint8)
-            
             # Get user's role color, default to white
-            role_color = (255, 255, 255)  # white default
+            role_color = (255, 255, 255)
             availablecolors = []
             for role in original_message.author.roles:
                 if role.color.value != 0:
                     availablecolors.append(role.color.to_rgb())
-            availablecolors.reverse() # reverse so higher roles take precedence
-            if availablecolors: 
-                role_color = availablecolors[0]            
-            # Apply color to gradient
-            brightness_f = brightness.astype(np.float32)
-            r = (brightness_f * role_color[0] / 255).astype(np.uint8)
-            g = (brightness_f * role_color[1] / 255).astype(np.uint8)
-            b = (brightness_f * role_color[2] / 255).astype(np.uint8)
-            gradient = Image.fromarray(np.stack([r, g, b], axis=2), 'RGB')
-            img.paste(gradient, (0, 0), Image.fromarray(brightness))
+            availablecolors.reverse()  # reverse so higher roles take precedence
+            if availablecolors:
+                role_color = availablecolors[0]
 
-            # Circular avatar
-            av_size = 300
-            avatar_img = avatar_img.resize((av_size, av_size), Image.LANCZOS)
-            mask = Image.new('L', (av_size, av_size), 0)
-            ImageDraw.Draw(mask).ellipse([0, 0, av_size - 1, av_size - 1], fill=255)
-            ax, ay = cx - av_size // 2, cy - av_size // 2
-            img.paste(avatar_img.convert('RGB'), (ax, ay), mask)
+            # Resolve @mentions / #channel-names to readable text before handing off to the renderer
+            resolved_text = resolveMentions(original_message.content, original_message)
 
-            draw = ImageDraw.Draw(img)
+            png_bytes = await quotescript.renderQuoteImage(
+                content_text=resolved_text,
+                author_display_name=getDisplay(original_message.author),
+                author_username=original_message.author.name,
+                avatar_bytes=avatar_bytes,
+                font_path=env["fontpath"],
+                role_color=role_color,
+            )
 
-            FONT_PATH = env["fontpath"]
-
-            # Fonts
-            try:
-                font_name     = ImageFont.truetype(FONT_PATH, 38)
-                font_username = ImageFont.truetype(FONT_PATH, 28)
-                font_wm       = ImageFont.truetype(FONT_PATH, 20)
-            except Exception:
-                font_name = font_username = font_wm = ImageFont.load_default()
-
-            # Text area: right half
-            tx, ty_pad = W // 2 + 30, 40
-            text_w = W - tx - ty_pad
-
-            # Truncate message if too long (e.g. > 200 chars)
-            max_chars = 200
-            quote_text = original_message.content
-            if len(quote_text) > max_chars:
-                quote_text = quote_text[:max_chars] + f"... [{len(quote_text)-max_chars} more characters]"
-
-            def wrap_text(text, font, max_width):
-                words = text.split()
-                lines, line = [], ""
-                for word in words:
-                    # Break word character-by-character if it alone exceeds max_width
-                    if draw.textbbox((0, 0), word, font=font)[2] > max_width:
-                        if line:
-                            lines.append(line)
-                            line = ""
-                        chunk = ""
-                        for ch in word:
-                            if draw.textbbox((0, 0), chunk + ch, font=font)[2] <= max_width:
-                                chunk += ch
-                            else:
-                                lines.append(chunk)
-                                chunk = ch
-                        word = chunk  # remainder treated as normal word
-                    test = (line + " " + word).strip()
-                    if draw.textbbox((0, 0), test, font=font)[2] <= max_width:
-                        line = test
-                    else:
-                        if line:
-                            lines.append(line)
-                        line = word
-                if line:
-                    lines.append(line)
-                return lines
-
-            # Dynamically shrink font until the wrapped text fits vertically
-            max_text_h = H - 80 - (font_name.size + 8) - font_username.size - 20
-            font_size = 62
-            while font_size >= 16:
-                try:
-                    font_quote = ImageFont.truetype(FONT_PATH, font_size)
-                except Exception:
-                    font_quote = ImageFont.load_default()
-                quote_lines = wrap_text(quote_text, font_quote, text_w)
-                lh = int(font_size * 1.25)
-                if len(quote_lines) * lh <= max_text_h:
-                    break
-                font_size -= 2
-
-            lh = int(font_size * 1.25)
-            total_q_h = len(quote_lines) * lh
-            name_h = font_name.size + 8
-            uname_h = font_username.size
-            total_h = total_q_h + name_h + uname_h + 20
-            start_y = (H - total_h) // 2
-
-            # Quote lines (centered in text area)
-            for i, line in enumerate(quote_lines):
-                lw = draw.textbbox((0, 0), line, font=font_quote)[2]
-                draw.text((tx + (text_w - lw) // 2, start_y + i * lh), line, fill=(255, 255, 255), font=font_quote)
-
-            y = start_y + total_q_h + 10
-
-            # "- DisplayName"
-            dname = f"- {getDisplay(original_message.author)}"
-            dw = draw.textbbox((0, 0), dname, font=font_name)[2]
-            draw.text((tx + (text_w - dw) // 2, y), dname, fill=(255, 255, 255), font=font_name)
-            y += name_h
-
-            # "@username"
-            uname = f"@{original_message.author.name}"
-            uw = draw.textbbox((0, 0), uname, font=font_username)[2]
-            draw.text((tx + (text_w - uw) // 2, y), uname, fill=(160, 160, 160), font=font_username)
-
-            # Watermark bottom-right
-            wm = f"rui kamishiro // coded by etangaming123 // join at hvl.etangaming.xyz"
-            draw.text((W - 12, H - 12), wm, fill=(90, 90, 90), font=font_wm, anchor="rb")
-
-            # Save and send
-            buffered = io.BytesIO()
-            img.save(buffered, format="PNG")
-            buffered.seek(0)
-            await message.channel.send(file=discord.File(buffered, filename="quote.png"), reference=message, mention_author=False)
+            await message.channel.send(file=discord.File(io.BytesIO(png_bytes), filename="quote.png"), reference=message, mention_author=False)
         except Exception as e: # FAH
             traceback.print_exc()
             await message.channel.send(f"Error creating quote image: {str(e)}", reference=message, mention_author=False)
-
 
 bot.run(env["token"])
