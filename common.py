@@ -14,6 +14,8 @@ import aiohttp
 import numpy as np
 import json
 
+import secure_token
+
 # variables // i cba adding these to env so eh
 joinandleavechannelid = 1477467436193153064
 messageloggingchannelid = 1477471562075607081
@@ -39,7 +41,7 @@ prescencecycles = ["Project SEKAI COLORFUL STAGE!", "hvl.etangaming.xyz!", "Yoyo
 
 env = json.load(open("env.json", "r"))
 
-openweatherapikey = env["openweatherapikey"]
+openweatherapikey = secure_token.secure_token("env.json", "openweatherapikey")
 
 # customqueuecheck
 playersinqueue = 0

@@ -13,6 +13,8 @@ import aiohttp
 import json
 import re
 
+import secure_token
+
 bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
 
 COG_EXTENSIONS = [
@@ -522,4 +524,4 @@ async def on_message(message):
             traceback.print_exc()
             await message.channel.send(f"Error creating quote image: {str(e)}", reference=message, mention_author=False)
 
-bot.run(env["token"])
+bot.run(secure_token.secure_token("env.json", "token"))

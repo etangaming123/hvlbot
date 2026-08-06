@@ -6,3 +6,4 @@ hvlbot.code-workspace
 *.bat
 __pycache__/
 *.pyc
+*.key
