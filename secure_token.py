@@ -27,7 +27,7 @@ import binascii
 from cryptography.fernet import Fernet, InvalidToken
 
 DEFAULT_KEY_FILE = "bot_token.key"
-DEFAULT_KEY_ENV_VAR = "BOT_TOKEN_ENCRYPTION_KEY"
+DEFAULT_KEY_ENV_VAR = "HVL_BOT_TOKEN_ENCRYPTION_KEY"
 
 DECRYPT_ERRORS = (InvalidToken, ValueError, TypeError, binascii.Error)
 
