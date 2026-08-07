@@ -6,3 +6,4 @@ numpy
 io
 emoji
 fonttools
+cryptography

@@ -14,6 +14,19 @@ You may also know this bot as "Rui Kamishiro" if you're in the server, or "CiRCL
 
 You can find the bot's features at [hvl.etangaming.xyz/rui](https://hvl.etangaming.xyz/rui).
 
+## Encryption keys
+
+`token` and `openweatherapikey` in `env.json` are encrypted at rest (reversible, via [`secure_token.py`](secure_token.py)) rather than stored in plaintext.
+
+Out of the box this needs zero setup: the first run auto-generates `bot_token.key` next to `env.json` and encrypts both fields under it. `bot_token.key` is gitignored — don't commit it, and don't lose it, or you'll need to re-enter both secrets.
+
+If you'd rather not rely on a key file sitting next to the config, set the `BOT_TOKEN_ENCRYPTION_KEY` environment variable instead. Existing file-key-encrypted values are transparently upgraded to the env-var key the next time the bot starts — no manual migration step.
+
+- **Windows:** double-click `setup_encryption_keys.bat`. It generates a key and persists it to your user environment via `setx`.
+- **macOS/Linux:** run `python generate_env_keys.py` and paste the printed `export BOT_TOKEN_ENCRYPTION_KEY="..."` line into your shell profile (`~/.zshrc`, `~/.bashrc`, etc).
+
+Either way, back up the printed key value — losing it means losing access to the stored bot token/API key and having to re-issue them.
+
 ## Contributing
 
 *Why would you subject yourself to the living hell of this bot?*

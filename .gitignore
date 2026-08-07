@@ -3,7 +3,7 @@ hvlbot.code-workspace
 .DS_Store
 .vscode
 *.json
-*.bat
+circleshama.bat
 __pycache__/
 *.pyc
 *.key
