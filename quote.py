@@ -16,6 +16,22 @@ from fontTools.ttLib import TTFont
 
 CUSTOM_EMOJI_RE = re.compile(r"<(a?):(\w+):(\d+)>")
 
+# Ordered longest-delimiter-first so "***"/"**" aren't shadowed by a "*" match,
+# and so each delimiter is matched against its own literal string (not just
+# style name) when deciding whether a marker opens or closes a run.
+MARKDOWN_DELIMS = [
+    ("```", frozenset({"code"})),
+    ("***", frozenset({"bold", "italic"})),
+    ("~~", frozenset({"strike"})),
+    ("**", frozenset({"bold"})),
+    ("__", frozenset({"underline"})),
+    ("||", frozenset({"spoiler"})),
+    ("`", frozenset({"code"})),
+    ("*", frozenset({"italic"})),
+    ("_", frozenset({"italic"})),
+]
+CODE_FENCE_LANG_RE = re.compile(r"[A-Za-z0-9_+-]*\n")
+
 FALLBACK_FONT_PATHS = [
     r"C:\Windows\Fonts\seguisym.ttf",  # Segoe UI Symbol: broad symbol/script coverage
     r"C:\Windows\Fonts\msyh.ttc",      # Microsoft YaHei: Chinese
@@ -74,6 +90,78 @@ def buildRuns(word, size, primary_path):
         runs.append((cur_text, getFontObj(cur_path, size)))
     return runs
 
+def parseDiscordMarkdown(text):
+    """Strip Discord markdown delimiters, returning (plain_text, style_ranges).
+
+    style_ranges is a list of (start, end, frozenset_of_styles) covering
+    plain_text contiguously. A delimiter only opens a run if its matching
+    close exists later in the string; otherwise it's kept as a literal
+    character, same fallback Discord itself uses for malformed markdown.
+    """
+    n = len(text)
+    i = 0
+    pos = 0
+    plain = []
+    ranges = []
+    stack = []  # (delim, style)
+    cur_buf = []
+
+    def active_style():
+        style = frozenset()
+        for _, st in stack:
+            style |= st
+        return style
+
+    def flush_buf():
+        nonlocal pos
+        if cur_buf:
+            piece = "".join(cur_buf)
+            plain.append(piece)
+            ranges.append((pos, pos + len(piece), active_style()))
+            pos += len(piece)
+            cur_buf.clear()
+
+    while i < n:
+        matched = None
+        for delim, style in MARKDOWN_DELIMS:
+            if text.startswith(delim, i):
+                matched = (delim, style)
+                break
+        if matched is None:
+            cur_buf.append(text[i])
+            i += 1
+            continue
+        delim, style = matched
+        if stack and stack[-1][0] == delim:
+            flush_buf()
+            stack.pop()
+            i += len(delim)
+            continue
+        if text.find(delim, i + len(delim)) == -1:
+            cur_buf.append(text[i])
+            i += 1
+            continue
+        flush_buf()
+        stack.append((delim, style))
+        i += len(delim)
+        if delim == "```":
+            m = CODE_FENCE_LANG_RE.match(text, i)
+            if m:
+                i = m.end()
+    flush_buf()
+    return "".join(plain), ranges
+
+def styleFor(style_ranges, span_start, span_end):
+    # a word can straddle a style boundary when markdown touches text with no
+    # surrounding space (e.g. "un**believable**"); use whichever style covers
+    # most of the span rather than just the first character's style
+    best_style, best_overlap = frozenset(), 0
+    for start, end, style in style_ranges:
+        overlap = min(end, span_end) - max(start, span_start)
+        if overlap > best_overlap:
+            best_overlap, best_style = overlap, style
+    return best_style
+
 def findEmojiSpans(text):
     spans = [(m.start(), m.end(), "custom", {"animated": bool(m.group(1)), "name": m.group(2), "id": m.group(3)}) for m in CUSTOM_EMOJI_RE.finditer(text)]
     spans += [(e["match_start"], e["match_end"], "unicode", {"char": e["emoji"]}) for e in emojilib.emoji_list(text)]
@@ -95,22 +183,75 @@ def safeTruncate(text, max_chars):
     return text[:cut], len(text) - cut
 
 def tokenizeContent(text):
-    spans = findEmojiSpans(text)
+    plain_text, style_ranges = parseDiscordMarkdown(text)
+    spans = findEmojiSpans(plain_text)
     tokens, pos = [], 0
     for start, end, kind, data in spans:
         if start > pos:
-            tokens.append(("text", text[pos:start]))
-        tokens.append((kind, data))
+            tokens.append(("text", plain_text[pos:start], pos, start))
+        tokens.append((kind, data, start, end))
         pos = end
-    if pos < len(text):
-        tokens.append(("text", text[pos:]))
+    if pos < len(plain_text):
+        tokens.append(("text", plain_text[pos:], pos, len(plain_text)))
     atoms = []
-    for kind, data in tokens:
+    for kind, data, start_pos, end_pos in tokens:
         if kind == "text":
-            atoms.extend(("word", w) for w in data.split())
+            for m in re.finditer(r"\S+", data):
+                atoms.append(("word", m.group(0), styleFor(style_ranges, start_pos + m.start(), start_pos + m.end())))
         else:
-            atoms.append((kind, data))
+            atoms.append((kind, data, styleFor(style_ranges, start_pos, end_pos)))
     return atoms
+
+BOLD_STROKE = 1
+ITALIC_SHEAR = 0.22
+CODE_BG = (40, 40, 40)
+CODE_FG = (255, 200, 120)
+
+def runWidth(draw, text, font, style):
+    stroke_w = BOLD_STROKE if "bold" in style else 0
+    w = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_w)[2]
+    if "italic" in style:
+        w += int(font.size * ITALIC_SHEAR)
+    return w
+
+def drawStyledRun(img, draw, x, y, text, font, color, style):
+    """Draw one (text, font) run with Discord-style emphasis, return width consumed.
+
+    Bold is faked with a text outline stroke (no bold font file guaranteed to
+    exist), italic by shearing the glyphs on a scratch RGBA layer and
+    pasting the result, since PIL has no native oblique transform.
+    """
+    stroke_w = BOLD_STROKE if "bold" in style else 0
+    fill = CODE_FG if "code" in style else color
+    bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_w)
+    plain_w = bbox[2]
+
+    if "italic" in style:
+        left, top, right, bottom = bbox
+        left, top = min(left, 0), min(top, 0)
+        tmp_w, tmp_h = right - left, bottom - top
+        shift = int(tmp_h * ITALIC_SHEAR)
+        tmp = Image.new("RGBA", (tmp_w, tmp_h), (0, 0, 0, 0))
+        ImageDraw.Draw(tmp).text((-left, -top), text, font=font, fill=fill, stroke_width=stroke_w, stroke_fill=fill)
+        sheared = tmp.transform((tmp_w + shift, tmp_h), Image.AFFINE, (1, ITALIC_SHEAR, 0, 0, 1, 0), resample=Image.BICUBIC)
+        if "code" in style:
+            draw.rectangle([x - 4, y - 2, x + plain_w + shift + 4, y + font.size + 4], fill=CODE_BG)
+        img.paste(sheared, (x + left, y + top), sheared)
+        consumed_w = plain_w + shift
+    else:
+        if "code" in style:
+            draw.rectangle([x - 4, y - 2, x + plain_w + 4, y + font.size + 4], fill=CODE_BG)
+        draw.text((x, y), text, font=font, fill=fill, stroke_width=stroke_w, stroke_fill=fill)
+        consumed_w = plain_w
+
+    line_w = max(1, font.size // 16)
+    if "underline" in style:
+        ly = y + font.size + 1
+        draw.line([(x, ly), (x + consumed_w, ly)], fill=color, width=line_w)
+    if "strike" in style:
+        ly = y + int(font.size * 0.55)
+        draw.line([(x, ly), (x + consumed_w, ly)], fill=color, width=line_w)
+    return consumed_w
 
 async def fetchEmojiImage(session, kind, data, size):
     cache_key = (kind, data.get("id") or data.get("char"))
@@ -209,7 +350,7 @@ async def renderQuoteImage(
     # Prefetch emoji images (unicode + custom Discord emoji) once at a large size, resized per font-size trial
     emoji_images = {}
     async def prefetch(session):
-        for kind, data in atoms:
+        for kind, data, style in atoms:
             if kind in ("custom", "unicode"):
                 key = (kind, data.get("id") or data.get("char"))
                 if key not in emoji_images:
@@ -225,18 +366,19 @@ async def renderQuoteImage(
     def elementWidth(el):
         if el[0] == "emoji":
             return el[2]
-        return sum(draw.textbbox((0, 0), t, font=f)[2] for t, f in el[1])
+        runs, style = el[1], el[2]
+        return sum(runWidth(draw, t, f, style) for t, f in runs)
 
     def wrapAtoms(font_size):
         space_w = draw.textbbox((0, 0), " ", font=getFontObj(font_path, font_size))[2]
         lines, cur, cur_w = [], [], 0
-        for kind, data in atoms:
+        for kind, data, style in atoms:
             if kind == "word":
-                el = ("text", buildRuns(data, font_size, font_path))
+                el = ("text", buildRuns(data, font_size, font_path), style)
             else:
                 img128 = emoji_images.get((kind, data.get("id") or data.get("char")))
                 if img128 is None:
-                    el = ("text", buildRuns(data.get("char", ""), font_size, font_path))
+                    el = ("text", buildRuns(data.get("char", ""), font_size, font_path), style)
                 else:
                     el = ("emoji", img128.resize((font_size, font_size), Image.LANCZOS), font_size)
             w = elementWidth(el)
@@ -279,9 +421,9 @@ async def renderQuoteImage(
                 img.paste(emoji_img, (x, yy), emoji_img)
                 x += el[2]
             else:
-                for t, f in el[1]:
-                    draw.text((x, yy), t, fill=(255, 255, 255), font=f)
-                    x += draw.textbbox((0, 0), t, font=f)[2]
+                runs, style = el[1], el[2]
+                for t, f in runs:
+                    x += drawStyledRun(img, draw, x, yy, t, f, (255, 255, 255), style)
             x += space_w
 
     y = start_y + total_q_h + 10
