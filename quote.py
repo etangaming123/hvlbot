@@ -122,6 +122,19 @@ def parseDiscordMarkdown(text):
             cur_buf.clear()
 
     while i < n:
+        if stack and stack[-1][0] in ("`", "```"):
+            # inside a code span/fence: markdown is not parsed here, only the
+            # matching close is recognized (mirrors Discord's own behavior)
+            delim = stack[-1][0]
+            if text.startswith(delim, i):
+                flush_buf()
+                stack.pop()
+                i += len(delim)
+            else:
+                cur_buf.append(text[i])
+                i += 1
+            continue
+
         matched = None
         for delim, style in MARKDOWN_DELIMS:
             if text.startswith(delim, i):
@@ -132,6 +145,16 @@ def parseDiscordMarkdown(text):
             i += 1
             continue
         delim, style = matched
+        if all(c == "_" for c in delim):
+            # underscores don't open/close emphasis mid-word (snake_case,
+            # custom emoji names like <:some_emoji:123>), unlike "*"
+            before = text[i - 1] if i > 0 else ""
+            after = text[i + len(delim)] if i + len(delim) < n else ""
+            is_word_char = lambda c: c.isalnum() or c == "_"
+            if is_word_char(before) and is_word_char(after):
+                cur_buf.append(text[i])
+                i += 1
+                continue
         if stack and stack[-1][0] == delim:
             flush_buf()
             stack.pop()
@@ -369,26 +392,56 @@ async def renderQuoteImage(
         runs, style = el[1], el[2]
         return sum(runWidth(draw, t, f, style) for t, f in runs)
 
+    def splitLongWord(word, font_size):
+        # break an unbroken run (e.g. "MEMEMEME...") into chunks that each
+        # fit text_w, so it wraps instead of overflowing past the text area
+        chunks, cur, cur_w = [], "", 0
+        for ch in word:
+            path = choosePathForChar(ch, font_path)
+            ch_w = runWidth(draw, ch, getFontObj(path, font_size), frozenset())
+            if cur and cur_w + ch_w > text_w:
+                chunks.append(cur)
+                cur, cur_w = ch, ch_w
+            else:
+                cur += ch
+                cur_w += ch_w
+        if cur:
+            chunks.append(cur)
+        return chunks
+
+    def atomElements(kind, data, style, font_size):
+        # returns [(element, needs_space_before), ...]; chunks split out of
+        # one long word are glued together (no space between them)
+        if kind == "word":
+            el = ("text", buildRuns(data, font_size, font_path), style)
+            if elementWidth(el) <= text_w:
+                return [(el, True)]
+            chunks = splitLongWord(data, font_size)
+            return [(("text", buildRuns(c, font_size, font_path), style), i == 0)
+                    for i, c in enumerate(chunks)]
+        img128 = emoji_images.get((kind, data.get("id") or data.get("char")))
+        if img128 is None:
+            # custom emoji has no "char" fallback glyph (deleted/CDN failure);
+            # show its name instead of silently dropping the atom
+            fallback_text = data.get("char") or f":{data.get('name', 'emoji')}:"
+            el = ("text", buildRuns(fallback_text, font_size, font_path), style)
+        else:
+            el = ("emoji", img128.resize((font_size, font_size), Image.LANCZOS), font_size)
+        return [(el, True)]
+
     def wrapAtoms(font_size):
         space_w = draw.textbbox((0, 0), " ", font=getFontObj(font_path, font_size))[2]
         lines, cur, cur_w = [], [], 0
         for kind, data, style in atoms:
-            if kind == "word":
-                el = ("text", buildRuns(data, font_size, font_path), style)
-            else:
-                img128 = emoji_images.get((kind, data.get("id") or data.get("char")))
-                if img128 is None:
-                    el = ("text", buildRuns(data.get("char", ""), font_size, font_path), style)
+            for el, spacer in atomElements(kind, data, style, font_size):
+                w = elementWidth(el)
+                add_w = w if not cur else (space_w if spacer else 0) + w
+                if cur and cur_w + add_w > text_w:
+                    lines.append(cur)
+                    cur, cur_w = [(el, spacer)], w
                 else:
-                    el = ("emoji", img128.resize((font_size, font_size), Image.LANCZOS), font_size)
-            w = elementWidth(el)
-            add_w = w if not cur else space_w + w
-            if cur and cur_w + add_w > text_w:
-                lines.append(cur)
-                cur, cur_w = [el], w
-            else:
-                cur.append(el)
-                cur_w += add_w
+                    cur.append((el, spacer))
+                    cur_w += add_w
         if cur:
             lines.append(cur)
         return lines, space_w
@@ -412,10 +465,14 @@ async def renderQuoteImage(
 
     # Quote lines (centered in text area)
     for i, line in enumerate(quote_lines):
-        line_w = sum(elementWidth(el) for el in line) + space_w * (len(line) - 1)
+        line_w = sum(elementWidth(el) for el, _ in line) + space_w * sum(
+            1 for j, (_, spacer) in enumerate(line) if j > 0 and spacer
+        )
         x = tx + (text_w - line_w) // 2
         yy = start_y + i * lh
-        for el in line:
+        for j, (el, spacer) in enumerate(line):
+            if j > 0 and spacer:
+                x += space_w
             if el[0] == "emoji":
                 emoji_img = el[1]
                 img.paste(emoji_img, (x, yy), emoji_img)
@@ -424,7 +481,6 @@ async def renderQuoteImage(
                 runs, style = el[1], el[2]
                 for t, f in runs:
                     x += drawStyledRun(img, draw, x, yy, t, f, (255, 255, 255), style)
-            x += space_w
 
     y = start_y + total_q_h + 10
 
