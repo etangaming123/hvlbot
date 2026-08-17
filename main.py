@@ -461,12 +461,21 @@ async def on_message(message):
         return
     if isinstance(message.channel, discord.DMChannel): # log dms
         channel = bot.get_channel(SUPASECRETLOGGINGCHANNELID)
+        contenttoolong = len(message.content) > 1024 # embed field value limit
         embed = discord.Embed(title="DM Received", description=f"DM from {formatUsername(message.author)}", color=discord.Color.blue())
-        embed.add_field(name="Content", value=truncateMessage(message.content, 1024) if message.content else "No content", inline=False)
+        if not message.content:
+            embed.add_field(name="Content", value="No content", inline=False)
+        elif contenttoolong:
+            embed.add_field(name="Content", value="Message too long for an embed, see attached file.", inline=False)
+        else:
+            embed.add_field(name="Content", value=message.content, inline=False)
         embed.add_field(name="Attachments", value=f"{len(message.attachments)} attachment(s)" if message.attachments else "No attachments", inline=False)
         embed.add_field(name="Attachment URLs", value="\n".join([attachment.url for attachment in message.attachments]) if message.attachments else "No attachments", inline=False)
         embed.set_image(url=message.attachments[0].url if message.attachments else None)
         await channel.send(embed=embed)
+        if contenttoolong:
+            file = discord.File(io.BytesIO(message.content.encode("utf-8")), filename="message.txt")
+            await channel.send(file=file)
         return
     if message.channel.id == bottrapchannelid: # ban those who send messages in the oh so obvious trap
         lchannelreal = bot.get_channel(messageloggingchannelid)
