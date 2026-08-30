@@ -7,3 +7,5 @@ io
 emoji
 fonttools
 cryptography
+PyNaCl
+yt-dlp

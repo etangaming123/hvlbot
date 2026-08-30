@@ -64,7 +64,7 @@ for item in datastores:
             json.dump({}, file)
         print(f"Created new file [{item}.json]")
 
-datastoresbuttheseonesarelists = ["starboard", "bannedecqc"] # json files to create but these are lists
+datastoresbuttheseonesarelists = ["starboard", "bannedecqc", "djs"] # json files to create but these are lists
 for item in datastoresbuttheseonesarelists:
     if os.path.exists(f"{item}.pkl"):
         data = pickle.load(open(f"{item}.pkl", "rb"))

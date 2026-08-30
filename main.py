@@ -27,6 +27,7 @@ COG_EXTENSIONS = [
     "cogs.achievements",
     "cogs.alts",
     "cogs.sticky",
+    "cogs.music",
 ]
 
 cogs_loaded = False
