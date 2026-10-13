@@ -254,6 +254,36 @@ class Achievements(commands.Cog):
 
         await interaction.edit_original_response(content=string)
 
+    @app_commands.command(name="grant-all-achievements", description="Give an achievement to all users (owner only)")
+    @app_commands.describe(achievement="The achievement you want to grant (id)")
+    async def grantallachievements(self, interaction: discord.Interaction, achievement: str):
+        await interaction.response.defer(ephemeral=True)
+        if interaction.user.id != etanid:
+            await interaction.edit_original_response(content="You don't have permission to use this command!")
+            return
+
+        allachievements = loadData("achievements")
+        playerachievements = loadData("playerachievements")
+        if allachievements == "" or playerachievements == "":
+            await interaction.edit_original_response(content="An error occurred while loading achievement data.")
+            return
+
+        achievementinfo = allachievements.get(str(achievement))
+        if not achievementinfo:
+            await interaction.edit_original_response(content="That achievement does not exist.")
+            return
+
+        guild = self.bot.get_guild(serverid)
+        for member in guild.members:
+            if member.bot:
+                continue
+            if str(member.id) not in playerachievements:
+                playerachievements[str(member.id)] = []
+            if achievement not in playerachievements[str(member.id)]:
+                playerachievements[str(member.id)].append(achievement)
+
+        saveData("playerachievements", playerachievements)
+        await interaction.edit_original_response(content=f"Granted the achievement '{achievementinfo.get('name')}' to all users!")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Achievements(bot))
