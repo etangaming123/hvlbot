@@ -171,6 +171,29 @@ class Achievements(commands.Cog):
             return [app_commands.Choice(name="You don't have any!", value="__no_achievements__")]
         return choices
 
+    @app_commands.command(name="unequip-achievement", description="Unequip your currently equipped achievement")
+    async def unequipachievement(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        allachievements = loadData("achievements")
+        if allachievements == "":
+            await interaction.edit_original_response(content="An error occurred while loading achievement data.")
+            return
+
+        achievementroleids = []
+        for item in allachievements.values():
+            roleid = item.get("roleid")
+            if roleid:
+                achievementroleids.append(roleid)
+
+        rolestoremove = [item for item in interaction.user.roles if item.id in achievementroleids]
+        if not rolestoremove:
+            await interaction.edit_original_response(content="You don't have any achievements equipped!")
+            return
+
+        await interaction.user.remove_roles(*rolestoremove, reason="Unequipping achievement")
+        await interaction.edit_original_response(content="Unequipped your achievement!")
+
     @app_commands.command(name="player-achievements", description="View all achievements you or someone else have earned!")
     @app_commands.describe(user="The user to check achievements for. Defaults to yourself.")
     async def listachievements(self, interaction: discord.Interaction, user: discord.User = None):
