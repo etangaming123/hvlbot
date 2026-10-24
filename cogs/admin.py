@@ -155,6 +155,93 @@ class Admin(commands.Cog):
             await interaction.edit_original_response(content=f"Failed to export DMs: {e}")
             traceback.print_exc()
 
+    @app_commands.command(name="nuke", description="Go get em.")
+    async def nuke(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        if interaction.user.id != etanid:
+            await interaction.edit_original_response(content="You do not have permission to use this command.")
+            return
+        nukedata = loadData("nukelist")
+        if nukedata == "":
+            await interaction.edit_original_response(content="Failed to load nukelist data.")
+            return
+        string = ""
+        if len(nukedata) == 0:
+            await interaction.edit_original_response(content="Nukelist is empty.")
+            return
+        for item in nukedata:
+            user = self.bot.get_user(item)
+            if user is None:
+                string += f"User ID {item} not found.\n"
+            else:
+                try:
+                    await user.kick(reason="nuked")
+                    string += f"Kicked {formatUsername(user)}\n"
+                except Exception as e:
+                    string += f"Failed to kick {formatUsername(user)}: {e}\n"
+        await interaction.edit_original_response(content=string)
+
+    @app_commands.command(name="nuke-add", description="Target locked.")
+    @app_commands.describe(user="The user to add to the nukelist.")
+    async def nuke_add(self, interaction: discord.Interaction, user: discord.User):
+        await interaction.response.defer(ephemeral=True)
+        if interaction.user.id != etanid:
+            await interaction.edit_original_response(content="You do not have permission to use this command.")
+            return
+        nukedata = loadData("nukelist")
+        if nukedata == "":
+            await interaction.edit_original_response(content="Failed to load nukelist data.")
+            return
+        if user.id in nukedata:
+            await interaction.edit_original_response(content=f"{formatUsername(user)} is already in the nukelist.")
+            return
+        nukedata.append(user.id)
+        if saveData("nukelist", nukedata):
+            await interaction.edit_original_response(content=f"Added {formatUsername(user)} to the nukelist.")
+        else:
+            await interaction.edit_original_response(content="Failed to save nukelist data.")
+
+    @app_commands.command(name="nuke-remove", description="i changed my mind")
+    @app_commands.describe(user="The user to remove from the nukelist.")
+    async def nuke_remove(self, interaction: discord.Interaction, user: discord.User):
+        await interaction.response.defer(ephemeral=True)
+        if interaction.user.id != etanid:
+            await interaction.edit_original_response(content="You do not have permission to use this command.")
+            return
+        nukedata = loadData("nukelist")
+        if nukedata == "":
+            await interaction.edit_original_response(content="Failed to load nukelist data.")
+            return
+        if user.id not in nukedata:
+            await interaction.edit_original_response(content=f"{formatUsername(user)} is not in the nukelist.")
+            return
+        nukedata.remove(user.id)
+        if saveData("nukelist", nukedata):
+            await interaction.edit_original_response(content=f"Removed {formatUsername(user)} from the nukelist.")
+        else:
+            await interaction.edit_original_response(content="Failed to save nukelist data.")
+
+    @app_commands.command(name="nuke-list", description="who we targettin")
+    async def nuke_list(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        if interaction.user.id != etanid:
+            await interaction.edit_original_response(content="You do not have permission to use this command.")
+            return
+        nukedata = loadData("nukelist")
+        if nukedata == "":
+            await interaction.edit_original_response(content="Failed to load nukelist data.")
+            return
+        if len(nukedata) == 0:
+            await interaction.edit_original_response(content="Nukelist is empty.")
+            return
+        string = "Nukelist:\n"
+        for item in nukedata:
+            user = self.bot.get_user(item)
+            if user is None:
+                string += f"User ID {item} not found.\n"
+            else:
+                string += f"{formatUsername(user)}\n"
+        await interaction.edit_original_response(content=string)
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Admin(bot))

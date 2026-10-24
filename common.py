@@ -37,7 +37,7 @@ lastcachedmembercount = 0
 bottraproleid = 1516000045332430918
 
 # what the bot is "playing", will cycle through randomly every minute
-prescencecycles = ["Project SEKAI COLORFUL STAGE!", "hvl.etangaming.xyz!", "Yoyoyo!", "coded by etangaming123!", "maimaiDX!", "[mai²] server tag!", "reply to a message with r>quote, trust me"]
+prescencecycles = ["Project SEKAI COLORFUL STAGE!", "hvl.etangaming.xyz!", "Yoyoyo!", "coded by etangaming123!", "maimaiDX!", "[＊HVL] server tag!", "reply to a message with r>quote, trust me"]
 
 env = json.load(open("env.json", "r"))
 
@@ -64,7 +64,7 @@ for item in datastores:
             json.dump({}, file)
         print(f"Created new file [{item}.json]")
 
-datastoresbuttheseonesarelists = ["starboard", "bannedecqc", "djs"] # json files to create but these are lists
+datastoresbuttheseonesarelists = ["starboard", "bannedecqc", "djs", "nukelist"] # json files to create but these are lists
 for item in datastoresbuttheseonesarelists:
     if os.path.exists(f"{item}.pkl"):
         data = pickle.load(open(f"{item}.pkl", "rb"))

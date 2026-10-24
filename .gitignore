@@ -7,3 +7,4 @@ circleshama.bat
 __pycache__/
 *.pyc
 *.key
+voice_relay.py
