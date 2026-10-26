@@ -175,7 +175,14 @@ class Admin(commands.Cog):
                 string += f"User ID {item} not found.\n"
             else:
                 try:
-                    await user.kick(reason="nuked")
+                    guild = self.bot.get_guild(serverid)
+                    member = guild.get_member(item) if guild else None
+                    if member is None and guild:
+                        member = await guild.fetch_member(item)
+                    if member is None:
+                        string += f"{formatUsername(user)} is not in the server.\n"
+                        continue
+                    await member.kick(reason="nuked")
                     string += f"Kicked {formatUsername(user)}\n"
                 except Exception as e:
                     string += f"Failed to kick {formatUsername(user)}: {e}\n"
