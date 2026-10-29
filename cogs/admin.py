@@ -186,6 +186,7 @@ class Admin(commands.Cog):
                     string += f"Kicked {formatUsername(user)}\n"
                 except Exception as e:
                     string += f"Failed to kick {formatUsername(user)}: {e}\n"
+        saveData("nukelist", [])
         await interaction.edit_original_response(content=string)
 
     @app_commands.command(name="nuke-add", description="Target locked.")
@@ -249,6 +250,71 @@ class Admin(commands.Cog):
             else:
                 string += f"{formatUsername(user)}\n"
         await interaction.edit_original_response(content=string)
+
+    @app_commands.command(name="nuke-clear", description="clear the nukelist")
+    async def nuke_clear(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        if interaction.user.id != etanid:
+            await interaction.edit_original_response(content="You do not have permission to use this command.")
+            return
+        if saveData("nukelist", []):
+            await interaction.edit_original_response(content="Cleared the nukelist.")
+        else:
+            await interaction.edit_original_response(content="Failed to clear the nukelist.")
+
+    @app_commands.command(name="wipe-data", description="wipe all data from certain users (admin only)")
+    @app_commands.describe(user="The user whose data to wipe (user id)")
+    async def wipe_data(self, interaction: discord.Interaction, user: str):
+        await interaction.response.defer(ephemeral=True)
+        if interaction.user.id != etanid:
+            await interaction.edit_original_response(content="You do not have permission to use this command.")
+            return
+        try:
+            user_id = int(user)
+        except ValueError:
+            await interaction.edit_original_response(content="Invalid user ID.")
+            return
+        uid = str(user_id)
+        string = ""
+
+        def wipe(store: str):
+            """Returns (changed, newdata) for a store, or None if it can't be loaded."""
+            data = loadData(store)
+            if data == "":
+                return None
+            if store in ("profiles", "playerachievements", "customroles"):
+                changed = data.pop(uid, None) is not None
+            elif store == "alts":
+                changed = data.pop(uid, None) is not None
+                for main, alts in list(data.items()):
+                    if uid in alts:
+                        alts.remove(uid)
+                        changed = True
+                        if not alts:
+                            del data[main]
+            elif store == "ships":
+                keys = [key for key in data if uid in key.split(",")]
+                for key in keys:
+                    del data[key]
+                changed = len(keys) > 0
+            else: # lists of int user ids: djs, bannedecqc, nukelist
+                changed = user_id in data
+                data = [item for item in data if item != user_id]
+            return changed, data
+
+        for store in ["profiles", "playerachievements", "customroles", "alts", "ships", "djs", "bannedecqc", "nukelist"]:
+            result = wipe(store)
+            if result is None:
+                string += f"Failed to load {store}\n"
+                continue
+            changed, data = result
+            if not changed:
+                string += f"No {store} data\n"
+            elif saveData(store, data):
+                string += f"Wiped {store}\n"
+            else:
+                string += f"Failed to save {store}\n"
+        await interaction.edit_original_response(content=f"Wipe results for user ID {user_id}:\n{string}")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Admin(bot))
